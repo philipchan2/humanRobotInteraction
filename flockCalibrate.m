@@ -2,6 +2,7 @@ function flockCalibrate
 % read in the sampled flock of birds data in order to generate the
 % tranformation to the labeled space.
 % philip.chan2@gmail.com
+% see the defined function adjustFlockData
 
 % the recorded data goes around points counterclockwise
 % birds are fixed to a ruler 30 cm apart
