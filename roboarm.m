@@ -1,36 +1,100 @@
 %Setup communication to robot
-cd c:\usr\myopen\MiniVIE
+% cd c:\usr\myopen\MiniVIE
+clear; close all;clc
 MiniVIE.configurePath
 import Presentation.CytonI.*
 
 %Controls the VIE plant
 hCyton=CytonI;
+obj.hCyton = hCyton; %strange usage
 
 %Syncs up with the actual robot
-hCyton.connectToHardware('COM5')
+% hCyton.connectToHardware('COM5')
 
 % Get dh parameter constants
-for i=0:-0.1778:-1.6;
-[xform, a, d] = hCyton.hControls.getDHParams();
-q    = hCyton.JointParameters
-numJ = hCyton.hControls.numericJacobian(q);
-invJ = pinv(numJ);
-bodyV= [0 100 0 0 0 0];
-qdot = invJ*bodyV';
-q    = q + [qdot; 0] 
-q=[0 i 0 0 0 0 0 0];
-hCyton.setJointParameters(q); 
-pause(5);
+%     [xform, a, d] = hCyton.hControls.getDHParams();
+
+% init command to all zeros
+q=[0 0 0 0 0 0 0 0].';
+obj.hCyton.setJointParameters(q);
+
+timeStep = 5; % tuneable parameter that controls speed -
+% can be dynamic based on the distance from the goal
+counter = 0;
+keepRunning = 1; % init
+while  keepRunning
+    counter = counter +1;
+    if counter > 50
+        keepRunning = 0;
+        disp('finished time')
+    end
+    
+    
+    %get the current position of the end effector
+    jointFrame = obj.hCyton.hControls.getJointFrames;
+    jointFrame = jointFrame(:,:,7); % end effector only
+    endeffPos = jointFrame(1:3,4); % position only
+    
+    endeffPos = obj.hCyton.hControls.getT_0_N;
+    endeffPos = endeffPos(1:3,4);
+    
+    % compute the goal position
+    goalPos = [200 0 300].';
+    
+    % compute the difference between the goal and current position
+    commandVector = goalPos - endeffPos;
+    posDiff = norm(commandVector);
+    
+    % if the goal is reached, stop
+    goalMargin = 10;
+    if posDiff < goalMargin % within some margin
+        keepRunning = 0;
+        disp('goal reached')
+        
+    else
+        % compute the unit vector
+        % can be scaled by posDiff
+        commandVector = commandVector/norm(commandVector)*timeStep;
+        
+        % get the command/desired velocity vector
+        if 0
+            commandVel= [commandVector.' 0 0 0]; % set orientations to zero
+            % this has problems because the orientation is locked
+            % get the Jacobian and pseudoinverse
+            q    = obj.hCyton.JointParameters;
+            numJ = obj.hCyton.hControls.numericJacobian(q);
+            invJ = pinv(numJ);
+            
+            % compute the joint rates to realize the motion
+            qdot = invJ*commandVel';
+            
+            % use the time step to compute the command position
+            q    = q + [qdot; 0]; % the last command is for the gripper
+        else
+            commandVel= [commandVector.' nan nan nan]; % set orientations to do-not-care
+            [qdot, J] = obj.hCyton.hControls.computeVelocity(commandVel);
+            
+            % use the time step to compute the command position
+            q    = q + [qdot]; % the last command is for the gripper
+        end
+        
+        
+        
+        obj.hCyton.setJointParameters(q);
+        
+        pause(.25); % wait
+        
+    end
 end
 
-
+return
 
 for x=100:10:400;
     
     %Planned trajectory of robot arm
     y = 300*sin(x);
     p = [x y 300];
-
+    
     %Create line segment for user forearm
     birdline = [outdata.bird1pos(1,:);outdata.bird2pos(1,:)]
     birdline_len = sqrt(sum((birdline(1,:)-birdline(2,:)).^2));
@@ -41,7 +105,7 @@ for x=100:10:400;
     %If intersection: Move up in z-direction
     %If no intersection: Robot continues to point p
     robo = p-outdata.bird1pos(1,:);
-    robo_len = sqrt(robo.^2));
+    robo_len = sqrt(robo.^2);
     robo_dir = robo/robo_len;
     if (robo_dir == bird_dir & robo_len<=birdline_len)
         p = [x y 400];
