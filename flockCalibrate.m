@@ -47,7 +47,7 @@ set(gca, 'cameraPosition', [-1 -1 1]);
 
 %% Flock Data
 diagonalShift = 0; % whether to shift diagonal
-switch 1
+switch 0
     case 0
         % read the trajectory
         load('flockSample_201345164355');
