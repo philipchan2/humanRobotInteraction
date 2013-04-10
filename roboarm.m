@@ -9,7 +9,7 @@ hCyton=CytonI;
 obj.hCyton = hCyton; %strange usage
 
 %Syncs up with the actual robot
-% hCyton.connectToHardware('COM5')
+ hCyton.connectToHardware('COM5')
 
 % Get dh parameter constants
 %     [xform, a, d] = hCyton.hControls.getDHParams();
@@ -18,28 +18,41 @@ obj.hCyton = hCyton; %strange usage
 q=[0 0 0 0 0 0 0 0].';
 obj.hCyton.setJointParameters(q);
 
-timeStep = 5; % tuneable parameter that controls speed -
+timeStep = 10; % tuneable parameter that controls speed -
 % can be dynamic based on the distance from the goal
+
+% compute the goal position
+goalTraj = [
+    -300 -100 100
+    -300 -100 200
+    -300 -100 300
+    -300 -100 350
+    -300 0 350
+    0 0 500
+    ];
+
+i = 1; % index to traj
+goalPos = goalTraj(i,:).';
+hCyton.hDisplay.setTarget(goalPos);
+
 counter = 0;
 keepRunning = 1; % init
 while  keepRunning
     counter = counter +1;
-    if counter > 50
+    if counter > 500
         keepRunning = 0;
+        beep;beep;
         disp('finished time')
     end
     
     
     %get the current position of the end effector
-    jointFrame = obj.hCyton.hControls.getJointFrames;
-    jointFrame = jointFrame(:,:,7); % end effector only
-    endeffPos = jointFrame(1:3,4); % position only
+%     jointFrame = obj.hCyton.hControls.getJointFrames;
+%     jointFrame = jointFrame(:,:,7); % end effector only
+%     endeffPos = jointFrame(1:3,4); % position only
     
     endeffPos = obj.hCyton.hControls.getT_0_N;
     endeffPos = endeffPos(1:3,4);
-    
-    % compute the goal position
-    goalPos = [200 0 300].';
     
     % compute the difference between the goal and current position
     commandVector = goalPos - endeffPos;
@@ -48,8 +61,12 @@ while  keepRunning
     % if the goal is reached, stop
     goalMargin = 10;
     if posDiff < goalMargin % within some margin
-        keepRunning = 0;
-        disp('goal reached')
+        i = i+1; % increment
+        goalPos = goalTraj(i,:).';
+        hCyton.hDisplay.setTarget(goalPos);
+        
+%         keepRunning = 0;
+%         disp('goal reached')
         
     else
         % compute the unit vector
@@ -140,3 +157,4 @@ end
 % the next steps are to invert the jacobian, multiply by the desired velocity, and apply the joint velocities.
 % Using the -Z slider you can see the robot does behave well when it is not in contact with joint limits. However unexpected behavior results when the 'elbow' joint locks out. Think about why this is.
 %
+
