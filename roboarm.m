@@ -1,6 +1,7 @@
 %Setup communication to robot
 % cd c:\usr\myopen\MiniVIE
 clear; close all;clc
+
 MiniVIE.configurePath
 import Presentation.CytonI.*
 
@@ -9,7 +10,7 @@ hCyton=CytonI;
 obj.hCyton = hCyton; %strange usage
 
 %Syncs up with the actual robot
- hCyton.connectToHardware('COM5')
+%  hCyton.connectToHardware('COM5')
 
 % Get dh parameter constants
 %     [xform, a, d] = hCyton.hControls.getDHParams();
@@ -28,29 +29,63 @@ goalTraj = [
     -300 -100 300
     -300 -100 350
     -300 0 350
-    0 0 500
+    -300 0 300
+    -300 0 200
+    -300 0 100
     ];
 
 i = 1; % index to traj
 goalPos = goalTraj(i,:).';
 hCyton.hDisplay.setTarget(goalPos);
 
-counter = 0;
+
+%% Flock of birds data
+% bird1 = [200 200  500];
+% bird2 = [0 200 500];
+% hCyton.hDisplay.setBird1(bird1);
+% hCyton.hDisplay.setBird2(bird2);
+diagonalShift = 0; % whether to shift diagonal
+switch 1
+    case 0
+        % read the trajectory
+        load('flockSample_201345164355');
+    case 1
+        load('flockSampleDiag_201345164749');
+        diagonalShift = 1; % whether to shift diagonal
+end
+% outdata.time;
+% outdata.bird1pos; % elbow
+% outdata.bird2pos; % hand
+
+% adjustments
+m2mm = 1e3;
+outdata.bird1pos = adjustFlockData(outdata.bird1pos,diagonalShift)*m2mm;
+outdata.bird2pos = adjustFlockData(outdata.bird2pos,diagonalShift)*m2mm;
+ibird = 0; % index to bird data
+% center on the robot frame with recorded data
+outdata.bird1pos(:,1:2) = outdata.bird1pos(:,1:2) - 300;% just for testing with recorded data
+outdata.bird2pos(:,1:2) = outdata.bird2pos(:,1:2) - 300;% just for testing with recorded data
+
+counter = 0; % init run counter
 keepRunning = 1; % init
 while  keepRunning
     counter = counter +1;
-    if counter > 500
+    if counter > 200
         keepRunning = 0;
         beep;beep;
         disp('finished time')
     end
     
+    %% update the flock
+    ibird = ibird+3; %increment
+    if ibird > size(outdata.bird1pos,1), ibird=1; end % loop back to the beginning
+    hCyton.hDisplay.setBird1(outdata.bird1pos(ibird,:));
+    hCyton.hDisplay.setBird2(outdata.bird2pos(ibird,:)); % plot the birds
+    
+    
+    %% update the arm
     
     %get the current position of the end effector
-%     jointFrame = obj.hCyton.hControls.getJointFrames;
-%     jointFrame = jointFrame(:,:,7); % end effector only
-%     endeffPos = jointFrame(1:3,4); % position only
-    
     endeffPos = obj.hCyton.hControls.getT_0_N;
     endeffPos = endeffPos(1:3,4);
     
@@ -62,6 +97,8 @@ while  keepRunning
     goalMargin = 10;
     if posDiff < goalMargin % within some margin
         i = i+1; % increment
+        if i > size(goalTraj,1), i=1; end % loop back to the beginning
+            
         goalPos = goalTraj(i,:).';
         hCyton.hDisplay.setTarget(goalPos);
         
@@ -94,15 +131,20 @@ while  keepRunning
             % use the time step to compute the command position
             q    = q + [qdot]; % the last command is for the gripper
         end
-        
-        
-        
+               
         obj.hCyton.setJointParameters(q);
         
-        pause(.25); % wait
+        pause(.1); % wait
         
     end
 end
+
+
+
+
+
+
+
 
 return
 
