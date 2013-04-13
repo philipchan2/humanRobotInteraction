@@ -1,5 +1,5 @@
 %Setup communication to robot
-% cd c:\usr\myopen\MiniVIE
+ cd c:\usr\myopen\MiniVIE
 clear; close all;clc
 
 MiniVIE.configurePath
@@ -18,22 +18,43 @@ obj.hCyton = hCyton; %strange usage
 % init command to all zeros
 q=[0 0 0 0 0 0 0 0].';
 obj.hCyton.setJointParameters(q);
+obj.hCyton.hPlant.ApplyLimits=true;
 
 timeStep = 10; % tuneable parameter that controls speed -
+
+
 % can be dynamic based on the distance from the goal
 
 % compute the goal position
-goalTraj = [
-    -300 -100 100
-    -300 -100 200
-    -300 -100 300
-    -300 -100 350
-    -300 0 350
-    -300 0 300
-    -300 0 200
-    -300 0 100
-    ];
-
+% trajx = chooses goal trajectory
+% trajx = 0  is original test goal trajectory
+% trajx = 1  is a sinusoidal wave in x-z plane , straight line in x-y plane;
+% trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane 
+trajx = 2;
+switch trajx
+    case 0
+        xtraj = zeros(1,8)-300;
+        ytraj = [zeros(1,4)-100,zeros(1,4)];
+        ztraj = [100 200 300 350 350 300 200 100];
+    case 1
+        xtraj = [-300:50:300];
+        ytraj = [ones(1,length(xtraj))*200];
+        ztraj = [100*sin((xtraj/300)*pi/2)+100];
+    case 2
+        rady= 200;
+        xseed1 = [200:-50:-200];
+        xseed2 = [-150:50:200];
+        yseed1 = [sqrt(rady^2-xseed1.^2)];
+        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
+        zseed1 = [50*sin((xseed1./200)*pi)+200];
+        zseed2 = [50*sin((xseed2./200)*pi)+200];
+        xtraj = [xseed1,xseed2];
+        ytraj = [yseed1,yseed2];
+        ztraj = [zseed1,zseed2];
+    case 3
+        
+end   
+goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
 i = 1; % index to traj
 goalPos = goalTraj(i,:).';
 hCyton.hDisplay.setTarget(goalPos);
@@ -81,7 +102,7 @@ while  keepRunning
     if ibird > size(outdata.bird1pos,1), ibird=1; end % loop back to the beginning
     hCyton.hDisplay.setBird1(outdata.bird1pos(ibird,:));
     hCyton.hDisplay.setBird2(outdata.bird2pos(ibird,:)); % plot the birds
-    
+%    hCyton.hDisplay.setArm([outdata.bird1pos(ibird,:);outdata.bird2pos(ibird,:)]); %plot line connecting birds
     
     %% update the arm
     
@@ -148,34 +169,34 @@ end
 
 return
 
-for x=100:10:400;
-    
-    %Planned trajectory of robot arm
-    y = 300*sin(x);
-    p = [x y 300];
-    
-    %Create line segment for user forearm
-    birdline = [outdata.bird1pos(1,:);outdata.bird2pos(1,:)]
-    birdline_len = sqrt(sum((birdline(1,:)-birdline(2,:)).^2));
-    bird_dir = (birdline(1,:)-birdline(2,:))/birdline_len;
-    
-    %Intersection
-    %Check if robot end-effector intersects forearm
-    %If intersection: Move up in z-direction
-    %If no intersection: Robot continues to point p
-    robo = p-outdata.bird1pos(1,:);
-    robo_len = sqrt(robo.^2);
-    robo_dir = robo/robo_len;
-    if (robo_dir == bird_dir & robo_len<=birdline_len)
-        p = [x y 400];
-    end
-    M = makehgtform('translate',p);
-    hCyton.hDisplay.setTarget(M);
-    %hCyton.hControls.goto(p);
-    
-    
-    
-end
+% for x=100:10:400;
+%     
+%     %Planned trajectory of robot arm
+%     y = 300*sin(x);
+%     p = [x y 300];
+%     
+%     %Create line segment for user forearm
+%     birdline = [outdata.bird1pos(1,:);outdata.bird2pos(1,:)]
+%     birdline_len = sqrt(sum((birdline(1,:)-birdline(2,:)).^2));
+%     bird_dir = (birdline(1,:)-birdline(2,:))/birdline_len;
+%     
+%     %Intersection
+%     %Check if robot end-effector intersects forearm
+%     %If intersection: Move up in z-direction
+%     %If no intersection: Robot continues to point p
+%     robo = p-outdata.bird1pos(1,:);
+%     robo_len = sqrt(robo.^2);
+%     robo_dir = robo/robo_len;
+%     if (robo_dir == bird_dir & robo_len<=birdline_len)
+%         p = [x y 400];
+%     end
+%     M = makehgtform('translate',p);
+%     hCyton.hDisplay.setTarget(M);
+%     %hCyton.hControls.goto(p);
+%     
+%     
+%     
+% end
 
 %Test case1:
 %Set birdline to a direction that will not intersect with the planned
