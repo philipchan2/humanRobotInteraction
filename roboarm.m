@@ -28,18 +28,21 @@ timeStep = 10; % tuneable parameter that controls speed -
 % compute the goal position
 % trajx = chooses goal trajectory
 % trajx = 0  is original test goal trajectory
-% trajx = 1  is a sinusoidal wave in x-z plane , straight line in x-y plane;
+% trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane 
+% trajx = 3  is a box motion; quirky, will work on singularities.
 trajx = 2;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
         ytraj = [zeros(1,4)-100,zeros(1,4)];
         ztraj = [100 200 300 350 350 300 200 100];
+        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
     case 1
-        xtraj = [-300:50:300];
-        ytraj = [ones(1,length(xtraj))*200];
-        ztraj = [100*sin((xtraj/300)*pi/2)+100];
+        xtraj = [-400:20:400];
+        ztraj = [ones(1,length(xtraj))*200];
+        ytraj = [100*sin((xtraj/100)*pi)+100];
+        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
     case 2
         rady= 200;
         xseed1 = [200:-50:-200];
@@ -51,10 +54,31 @@ switch trajx
         xtraj = [xseed1,xseed2];
         ytraj = [yseed1,yseed2];
         ztraj = [zseed1,zseed2];
+        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
     case 3
-        
+        startPt=[-200;-200;100;1];
+        posZ = makehgtform('translate',[0 0 100]);
+        negZ = makehgtform('translate',[0 0 -100]);
+        posY = makehgtform('translate',[0 400 0]);
+        negY = makehgtform('translate',[0 -400 0]);
+        posX = makehgtform('translate',[400 0 0]);
+        negX = makehgtform('translate',[-400 0 0]);
+        pt1=posZ*startPt;
+        pt2=posY*pt1;
+        pt3=negZ*pt2;
+        pt4=posZ*pt3;
+        pt5=posX*pt4;
+        pt6=negZ*pt5;
+        pt7=posZ*pt6;
+        pt8=negY*pt7;
+        pt9=negZ*pt8;
+        pt10=posZ*pt9;
+        pt11=negX*pt10;
+        goalTraj=[startPt(1:3)';pt1(1:3)';pt2(1:3)';pt3(1:3)';pt4(1:3)';
+            pt5(1:3)';pt6(1:3)';pt7(1:3)';pt8(1:3)';pt9(1:3)';pt10(1:3)';
+            pt11(1:3)'];        
 end   
-goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
+%goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
 i = 1; % index to traj
 goalPos = goalTraj(i,:).';
 hCyton.hDisplay.setTarget(goalPos);
