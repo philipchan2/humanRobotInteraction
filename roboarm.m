@@ -8,7 +8,8 @@ flockCOMstr = 'COM1'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
 useAvoidance = 1; % whether to avoid the flock
-maximumRepelDistance = 1000; %mm, max distance to consider avoidance 
+maximumRepelDistance = 400; %mm, max distance to consider avoidance 
+closestAllowedApproach = 200; % mm
 %%
 
 % setpaths
@@ -143,8 +144,8 @@ if useFlock
         outdata.bird2pos = adjustFlockData(outdata.bird2pos,diagonalShift)*m2mm;
         ibird = 0; % index to bird data
         % center on the robot frame with recorded data
-        outdata.bird1pos(:,1:2) = outdata.bird1pos(:,1:2)*.5 - 200;% just for testing with recorded data
-        outdata.bird2pos(:,1:2) = outdata.bird2pos(:,1:2)*.5 - 200;% just for testing with recorded data
+        outdata.bird1pos(:,1:2) = outdata.bird1pos(:,1:2)*.8 - 200;% just for testing with recorded data
+        outdata.bird2pos(:,1:2) = outdata.bird2pos(:,1:2)*.8 - 200;% just for testing with recorded data
         outdata.bird2pos(:,3) = outdata.bird2pos(:,3)+100;% just for testing with recorded data
     end
 end
@@ -176,7 +177,7 @@ while  keepRunning
                 hCyton.hDisplay.setBird2(flockPos(2,:));
             end
         else % use recorded data
-            ibird = ibird+3; %increment
+            ibird = ibird+1; %increment
             if ibird > size(outdata.bird1pos,1), ibird=1; end % loop back to the beginning
             hCyton.hDisplay.setBird1(outdata.bird1pos(ibird,:));
             hCyton.hDisplay.setBird2(outdata.bird2pos(ibird,:)); % plot the birds
@@ -232,8 +233,8 @@ while  keepRunning
             if useAvoidance && useFlock % change the command 3D velocity to avoid the flock
                 % flockPos, position of the two birds
                 % endeffPos, effector position
-%                 repelPos = flockPos(2,:); % select a bird
-                repelPos = goalTraj(4,:); % avoid a goal point
+                repelPos = flockPos(2,:); % select a bird
+%                 repelPos = goalTraj(4,:); % avoid a goal point
                 
                 
                 repelVec = endeffPos.' - repelPos; % vector of repulsion
@@ -241,7 +242,14 @@ while  keepRunning
                 
                 if repelDist <= maximumRepelDistance
                     %generate a repelling velocity from the repel position
-                    repelVelocity = timeStep*(repelDist/100)^-2*(repelVec/repelDist); % mag and direction
+%                     repelVelocity = timeStep*(repelDist/10)^-0.3*(repelVec/repelDist); % mag and direction
+                    
+                    % velocity is parabolic with zero at the
+                    % maximumRepelDistance and matches timeStep at the
+                    % closestAllowedApproach
+                    repelMag = (maximumRepelDistance-repelDist)^2*timeStep/closestAllowedApproach^2;
+                    repelVelocity = repelMag*repelVec/repelDist;
+                    
                     
                     % vector sum of repel and command velocity
                     commandVel(1:3) = commandVel(1:3) + repelVelocity;
