@@ -1,13 +1,14 @@
 clear; close all;clc
 % options
 
-useFlock = 0; % master switch to enable the flock of birds
+useFlock = 1; % master switch to enable the flock of birds
 
 FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
 flockCOMstr = 'COM1'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
-useAvoidance = 0; % whether to avoid the flock
+useAvoidance = 1; % whether to avoid the flock
+maximumRepelDistance = 1000; %mm, max distance to consider avoidance 
 %%
 
 % setpaths
@@ -228,9 +229,26 @@ while  keepRunning
         else
             commandVel= [commandVector.' nan nan nan]; % set orientations to do-not-care
             
-            if useAvoidance % change the command 3D velocity to avoid the flock
-                % flockPos position of the two birds
-%                 commandVel = TODO
+            if useAvoidance && useFlock % change the command 3D velocity to avoid the flock
+                % flockPos, position of the two birds
+                % endeffPos, effector position
+%                 repelPos = flockPos(2,:); % select a bird
+                repelPos = goalTraj(4,:); % avoid a goal point
+                
+                
+                repelVec = endeffPos.' - repelPos; % vector of repulsion
+                repelDist = norm(repelVec); % 3D distance, mm
+                
+                if repelDist <= maximumRepelDistance
+                    %generate a repelling velocity from the repel position
+                    repelVelocity = timeStep*(repelDist/100)^-2*(repelVec/repelDist); % mag and direction
+                    
+                    % vector sum of repel and command velocity
+                    commandVel(1:3) = commandVel(1:3) + repelVelocity;
+                    
+                else % free movement, don't change the command
+                end
+
             end
             [qdot, J] = obj.hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
             
