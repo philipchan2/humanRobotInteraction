@@ -1,7 +1,11 @@
 function [out] = adjustFlockData(pos, isDiagonal)
+% tranform the flock of birds position data to the robot coordinate frame
+% philip.chan2@gmail.com
+% april 2013
 
+% use flockSetup.m or roboarm.m to work on live calibration
 
-if isDiagonal
+if isDiagonal % if the transmitter is oriented on the bias
     A1 = makehgtform('zrotate',45*pi/180);
 else
     A1 = makehgtform;
