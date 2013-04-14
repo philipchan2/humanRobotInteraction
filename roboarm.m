@@ -1,7 +1,27 @@
-%Setup communication to robot
- cd c:\usr\myopen\MiniVIE
 clear; close all;clc
+% options
 
+useFlock = 0; % master switch to enable the flock of birds
+
+FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
+flockCOMstr = 'COM1'; % select the comm port
+diagonalShift = 1; % whether the live flock transmitter is set diagonally
+
+useAvoidance = 0; % whether to avoid the flock
+%%
+
+% setpaths
+if ~exist('MiniVIE')
+    addpath(genpath(pwd));
+    addpath(genpath('/Users/chanp1/myopen'));
+    
+    % cd c:\usr\myopen\MiniVIE
+end
+
+% constant
+m2mm = 1e3;
+
+%Setup communication to robot
 MiniVIE.configurePath
 import Presentation.CytonI.*
 
@@ -21,17 +41,15 @@ obj.hCyton.setJointParameters(q);
 obj.hCyton.hPlant.ApplyLimits=true;
 
 timeStep = 10; % tuneable parameter that controls speed -
-
-
 % can be dynamic based on the distance from the goal
 
-% compute the goal position
+% compute the goal position, units of mm
 % trajx = chooses goal trajectory
 % trajx = 0  is original test goal trajectory
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
-% trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane 
+% trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 2;
+trajx = 0;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -76,58 +94,96 @@ switch trajx
         pt11=negX*pt10;
         goalTraj=[startPt(1:3)';pt1(1:3)';pt2(1:3)';pt3(1:3)';pt4(1:3)';
             pt5(1:3)';pt6(1:3)';pt7(1:3)';pt8(1:3)';pt9(1:3)';pt10(1:3)';
-            pt11(1:3)'];        
-end   
+            pt11(1:3)'];
+end
 %goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
+
+% set the initial trajectory target position
 i = 1; % index to traj
 goalPos = goalTraj(i,:).';
 hCyton.hDisplay.setTarget(goalPos);
 
 
 %% Flock of birds data
-% bird1 = [200 200  500];
-% bird2 = [0 200 500];
-% hCyton.hDisplay.setBird1(bird1);
-% hCyton.hDisplay.setBird2(bird2);
-diagonalShift = 0; % whether to shift diagonal
-switch 1
-    case 0
-        % read the trajectory
-        load('flockSample_201345164355');
-    case 1
-        load('flockSampleDiag_201345164749');
-        diagonalShift = 1; % whether to shift diagonal
-end
-% outdata.time;
-% outdata.bird1pos; % elbow
-% outdata.bird2pos; % hand
+if useFlock
 
-% adjustments
-m2mm = 1e3;
-outdata.bird1pos = adjustFlockData(outdata.bird1pos,diagonalShift)*m2mm;
-outdata.bird2pos = adjustFlockData(outdata.bird2pos,diagonalShift)*m2mm;
-ibird = 0; % index to bird data
-% center on the robot frame with recorded data
-outdata.bird1pos(:,1:2) = outdata.bird1pos(:,1:2) - 300;% just for testing with recorded data
-outdata.bird2pos(:,1:2) = outdata.bird2pos(:,1:2) - 300;% just for testing with recorded data
+    if FlockLive
+        % setup the flock data
+        % Requires MiniVIE Utilities
+        objFlock = Inputs.FlockOfBirds;
+        objFlock.NumSensors = 2; % using birds 1 and 2
+        objFlock.initialize(flockCOMstr);% connect to the system
+
+        % init flockPos to arbitrary value
+        flockPos(1:2,1:3) = 1000; % outside of the workspace
+        
+    else % using recorded Flock data
+        % example usage
+        % bird1 = [200 200  500];
+        % bird2 = [0 200 500];
+        % hCyton.hDisplay.setBird1(bird1);
+        % hCyton.hDisplay.setBird2(bird2);
+        diagonalShift = 0; % whether to shift diagonal
+        switch 1
+            case 0
+                % read the trajectory
+                load('flockSample_201345164355');
+            case 1
+                load('flockSampleDiag_201345164749');
+                diagonalShift = 1; % whether to shift diagonal
+        end
+        % outdata.time;
+        % outdata.bird1pos; % elbow
+        % outdata.bird2pos; % hand
+        
+        % adjustments
+        m2mm = 1e3;
+        outdata.bird1pos = adjustFlockData(outdata.bird1pos,diagonalShift)*m2mm;
+        outdata.bird2pos = adjustFlockData(outdata.bird2pos,diagonalShift)*m2mm;
+        ibird = 0; % index to bird data
+        % center on the robot frame with recorded data
+        outdata.bird1pos(:,1:2) = outdata.bird1pos(:,1:2)*.5 - 200;% just for testing with recorded data
+        outdata.bird2pos(:,1:2) = outdata.bird2pos(:,1:2)*.5 - 200;% just for testing with recorded data
+        outdata.bird2pos(:,3) = outdata.bird2pos(:,3)+100;% just for testing with recorded data
+    end
+end
 
 counter = 0; % init run counter
 keepRunning = 1; % init
 while  keepRunning
     counter = counter +1;
-    if counter > 200
+    if counter > 10000 % keep from running forever
         keepRunning = 0;
         beep;beep;
         disp('finished time')
     end
     
     %% update the flock
-    ibird = ibird+3; %increment
-    if ibird > size(outdata.bird1pos,1), ibird=1; end % loop back to the beginning
-    hCyton.hDisplay.setBird1(outdata.bird1pos(ibird,:));
-    hCyton.hDisplay.setBird2(outdata.bird2pos(ibird,:)); % plot the birds
-%    hCyton.hDisplay.setArm([outdata.bird1pos(ibird,:);outdata.bird2pos(ibird,:)]); %plot line connecting birds
-    
+    if useFlock
+        if FlockLive % using the real live flock
+            [flockPos] = objFlock.getBirdGroup; % get the points from the Flock
+            %flockPos  indexed by bird, coordinate 1:3
+            
+            if ~isempty(flockPos) % if returned data
+                
+                % tranform the flock data to the robot frame
+                flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*m2mm;
+                flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
+                
+                % plot the birds on the VIE
+                hCyton.hDisplay.setBird1(flockPos(1,:));
+                hCyton.hDisplay.setBird2(flockPos(2,:));
+            end
+        else % use recorded data
+            ibird = ibird+3; %increment
+            if ibird > size(outdata.bird1pos,1), ibird=1; end % loop back to the beginning
+            hCyton.hDisplay.setBird1(outdata.bird1pos(ibird,:));
+            hCyton.hDisplay.setBird2(outdata.bird2pos(ibird,:)); % plot the birds
+            %    hCyton.hDisplay.setArm([outdata.bird1pos(ibird,:);outdata.bird2pos(ibird,:)]); %plot line connecting birds
+            % set the flock data to a common format with the live option
+            flockPos = [outdata.bird1pos(ibird,:) ;outdata.bird2pos(ibird,:)];
+        end
+    end
     %% update the arm
     
     %get the current position of the end effector
@@ -143,12 +199,12 @@ while  keepRunning
     if posDiff < goalMargin % within some margin
         i = i+1; % increment
         if i > size(goalTraj,1), i=1; end % loop back to the beginning
-            
+        
         goalPos = goalTraj(i,:).';
         hCyton.hDisplay.setTarget(goalPos);
         
-%         keepRunning = 0;
-%         disp('goal reached')
+        %         keepRunning = 0;
+        %         disp('goal reached')
         
     else
         % compute the unit vector
@@ -171,12 +227,17 @@ while  keepRunning
             q    = q + [qdot; 0]; % the last command is for the gripper
         else
             commandVel= [commandVector.' nan nan nan]; % set orientations to do-not-care
-            [qdot, J] = obj.hCyton.hControls.computeVelocity(commandVel);
+            
+            if useAvoidance % change the command 3D velocity to avoid the flock
+                % flockPos position of the two birds
+%                 commandVel = TODO
+            end
+            [qdot, J] = obj.hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
             
             % use the time step to compute the command position
             q    = q + [qdot]; % the last command is for the gripper
         end
-               
+        
         obj.hCyton.setJointParameters(q);
         
         pause(.1); % wait
@@ -194,16 +255,16 @@ end
 return
 
 % for x=100:10:400;
-%     
+%
 %     %Planned trajectory of robot arm
 %     y = 300*sin(x);
 %     p = [x y 300];
-%     
+%
 %     %Create line segment for user forearm
 %     birdline = [outdata.bird1pos(1,:);outdata.bird2pos(1,:)]
 %     birdline_len = sqrt(sum((birdline(1,:)-birdline(2,:)).^2));
 %     bird_dir = (birdline(1,:)-birdline(2,:))/birdline_len;
-%     
+%
 %     %Intersection
 %     %Check if robot end-effector intersects forearm
 %     %If intersection: Move up in z-direction
@@ -217,9 +278,9 @@ return
 %     M = makehgtform('translate',p);
 %     hCyton.hDisplay.setTarget(M);
 %     %hCyton.hControls.goto(p);
-%     
-%     
-%     
+%
+%
+%
 % end
 
 %Test case1:
