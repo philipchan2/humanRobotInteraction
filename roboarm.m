@@ -8,7 +8,7 @@ flockCOMstr = 'COM1'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
 useAvoidance = 1; % whether to avoid the flock
-maximumRepelDistance = 400; %mm, max distance to consider avoidance 
+maximumRepelDistance = 500; %mm, max distance to consider avoidance 
 closestAllowedApproach = 200; % mm
 %%
 
@@ -29,7 +29,7 @@ import Presentation.CytonI.*
 
 %Controls the VIE plant
 hCyton=CytonI;
-obj.hCyton = hCyton; %strange usage
+% obj.hCyton = hCyton; %strange usage
 
 %Syncs up with the actual robot
 %  hCyton.connectToHardware('COM5')
@@ -39,8 +39,8 @@ obj.hCyton = hCyton; %strange usage
 
 % init command to all zeros
 q=[0 0 0 0 0 0 0 0].';
-obj.hCyton.setJointParameters(q);
-obj.hCyton.hPlant.ApplyLimits=true;
+hCyton.setJointParameters(q);
+hCyton.hPlant.ApplyLimits=true;
 
 timeStep = 10; % tuneable parameter that controls speed -
 % can be dynamic based on the distance from the goal
@@ -189,7 +189,7 @@ while  keepRunning
     %% update the arm
     
     %get the current position of the end effector
-    endeffPos = obj.hCyton.hControls.getT_0_N;
+    endeffPos = hCyton.hControls.getT_0_N;
     endeffPos = endeffPos(1:3,4);
     
     % compute the difference between the goal and current position
@@ -218,8 +218,8 @@ while  keepRunning
             commandVel= [commandVector.' 0 0 0]; % set orientations to zero
             % this has problems because the orientation is locked
             % get the Jacobian and pseudoinverse
-            q    = obj.hCyton.JointParameters;
-            numJ = obj.hCyton.hControls.numericJacobian(q);
+            q    = hCyton.JointParameters;
+            numJ = hCyton.hControls.numericJacobian(q);
             invJ = pinv(numJ);
             
             % compute the joint rates to realize the motion
@@ -258,13 +258,13 @@ while  keepRunning
                 end
 
             end
-            [qdot, J] = obj.hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
+            [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
             
             % use the time step to compute the command position
             q    = q + [qdot]; % the last command is for the gripper
         end
         
-        obj.hCyton.setJointParameters(q);
+        hCyton.setJointParameters(q);
         
         pause(.1); % wait
         
