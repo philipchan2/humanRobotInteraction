@@ -11,14 +11,19 @@ else
     A1 = makehgtform;
 end
 
+% get to table frame
 A2 = makehgtform('xrotate',190*pi/180);
+   % center on the robot frame in x and y - equivalent to a translate
+A3 = makehgtform('translate',[-270 -70 0]/1000);
+    % rotate about z to match the robot frame
+A4 = makehgtform('zrotate',pi);
 
 for i = 1:size(pos,1) % loop over rows
     
-    A = A1*A2*makehgtform('translate',pos(i,:)); %bird position
-%     A = makehgtform('zrotate',pi)*A;
-    out(i,:) = A(1:3,4).'; %save data
-    
+    A = A4*A3*A1*A2*makehgtform('translate',pos(i,:)); %bird position
+
+    out(i,:) = A(1:3,4).'; %save position data
+   
 end
 
 end

@@ -1,20 +1,20 @@
 clear; close all;clc
 % cleanup
-% setpaths
+%% setpaths
 if ~exist('MiniVIE')
     
-    addpath(genpath('c:\usr\myopen\MiniVIE'));
-%     addpath(genpath(pwd));
-%     addpath(genpath('/Users/chanp1/myopen'));
+%     addpath(genpath('c:\usr\myopen\MiniVIE')); %in lab
     
-    % cd c:\usr\myopen\MiniVIE
+%     on Mac laptop
+    addpath(genpath(pwd));
+    addpath(genpath('/Users/chanp1/myopen'));
 end
 
-% options
+%% options
 
 useFlock = 1; % master switch to enable the flock of birds
 
-FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
 flockCOMstr = 'COM4'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
@@ -22,7 +22,13 @@ useAvoidance = 1; % whether to avoid the flock
 maximumRepelDistance = 500; %mm, max distance to consider avoidance 
 closestAllowedApproach = 200; % mm
 
-%% Flock of birds data
+timeStep = 10; % tuneable parameter that controls speed of robot
+% can be dynamic based on the distance from the goal
+% The command velocity is vector with this magnitude, mm
+
+%% constant
+m2mm = 1e3;
+%% Flock of birds setup
 if useFlock
 
     if FlockLive
@@ -55,24 +61,14 @@ if useFlock
         % outdata.bird2pos; % hand
         
         % adjustments
-        m2mm = 1e3;
         outdata.bird1pos = adjustFlockData(outdata.bird1pos,diagonalShift)*m2mm;
         outdata.bird2pos = adjustFlockData(outdata.bird2pos,diagonalShift)*m2mm;
-        ibird = 0; % index to bird data
-        % center on the robot frame with recorded data
-        outdata.bird1pos(:,1:2) = outdata.bird1pos(:,1:2)*.8 - 200;% just for testing with recorded data
-        outdata.bird2pos(:,1:2) = outdata.bird2pos(:,1:2)*.8 - 200;% just for testing with recorded data
-        outdata.bird2pos(:,3) = outdata.bird2pos(:,3)+100;% just for testing with recorded data
+        ibird = 0; % init index to bird data
     end
 end
 
 
 %%
-
-
-
-% constant
-m2mm = 1e3;
 
 %Setup communication to robot
 MiniVIE.configurePath
@@ -80,23 +76,17 @@ import Presentation.CytonI.*
 
 %Controls the VIE plant
 hCyton=CytonI;
-% obj.hCyton = hCyton; %strange usage
 
 %Syncs up with the actual robot
-hCyton.connectToHardware('COM1')
-
-% Get dh parameter constants
-%     [xform, a, d] = hCyton.hControls.getDHParams();
+% hCyton.connectToHardware('COM1')
 
 % init command to all zeros
 q=[0 0 0 0 0 0 0 0].';
 hCyton.setJointParameters(q);
 hCyton.hPlant.ApplyLimits=true;
 
-timeStep = 10; % tuneable parameter that controls speed -
-% can be dynamic based on the distance from the goal
 
-% compute the goal position, units of mm
+%% compute the goal position, units of mm
 % trajx = chooses goal trajectory
 % trajx = 0  is original test goal trajectory
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
@@ -158,23 +148,13 @@ i = 1; % index to traj
 goalPos = goalTraj(i,:).';
 hCyton.hDisplay.setTarget(goalPos);
 
-
-
-
-counter = 0; % init run counter
-keepRunning = 1; % init
+%% control loop
+keepRunning = 1;
 while  keepRunning
-    counter = counter +1;
-    if counter > 10000 % keep from running forever
-        keepRunning = 0;
-        beep;beep;
-        disp('finished time')
-    end
-    
     %% update the flock
     if useFlock
         if FlockLive % using the real live flock
-            flockPos_prev = flockPos; % save 
+            flockPos_prev = flockPos; % save the current position
             [flockPos] = objFlock.getBirdGroup; % get the points from the Flock
             %flockPos  indexed by bird, coordinate 1:3
             
@@ -183,20 +163,21 @@ while  keepRunning
                 % tranform the flock data to the robot frame
                 flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*m2mm;
                 flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
-                flockPos(:,1:2) = flockPos(:,1:2) - 200;
-                flockPos(:,1) = flockPos(:,1)-70;
-                flockPos(:,2) = flockPos(:,2)+130;
-                A = makehgtform('zrotate',pi);
-                A = A(1:3,1:3);
-                flockPos(1,:) = (A*flockPos(1,:).').';
-                flockPos(2,:) = (A*flockPos(2,:).').';
+%                 flockPos(:,1:2) = flockPos(:,1:2) - 200;
+%                 flockPos(:,1) = flockPos(:,1)-70;
+%                 flockPos(:,2) = flockPos(:,2)+130;
+%                 A = makehgtform('zrotate',pi);
+%                 A = A(1:3,1:3);
+%                 flockPos(1,:) = (A*flockPos(1,:).').';
+%                 flockPos(2,:) = (A*flockPos(2,:).').';
                 
                 
                 % plot the birds on the VIE
                 hCyton.hDisplay.setBird1(flockPos(1,:));
                 hCyton.hDisplay.setBird2(flockPos(2,:));
             else
-                flockPos = flockPos_prev;
+                % no data returned
+                flockPos = flockPos_prev; % keep the flock in the same place
             end
         else % use recorded data
             ibird = ibird+1; %increment
@@ -231,7 +212,7 @@ while  keepRunning
         %         disp('goal reached')
         
     else
-        % compute the unit vector
+        % compute the unit vector scaled by timeStep
         % can be scaled by posDiff
         commandVector = commandVector/norm(commandVector)*timeStep;
         
@@ -264,14 +245,12 @@ while  keepRunning
                 
                 if repelDist <= maximumRepelDistance
                     %generate a repelling velocity from the repel position
-%                     repelVelocity = timeStep*(repelDist/10)^-0.3*(repelVec/repelDist); % mag and direction
                     
                     % velocity is parabolic with zero at the
                     % maximumRepelDistance and matches timeStep at the
                     % closestAllowedApproach
                     repelMag = (maximumRepelDistance-repelDist)^2*timeStep/closestAllowedApproach^2;
                     repelVelocity = repelMag*repelVec/repelDist;
-                    
                     
                     % vector sum of repel and command velocity
                     commandVel(1:3) = commandVel(1:3) + repelVelocity;
@@ -286,6 +265,7 @@ while  keepRunning
             q    = q + [qdot]; % the last command is for the gripper
         end
         
+        % command the robot position in joint space q
         hCyton.setJointParameters(q);
         
         pause(.1); % wait
