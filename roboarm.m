@@ -1,110 +1,26 @@
 clear; close all;clc
+% cleanup
+% setpaths
+if ~exist('MiniVIE')
+    
+    addpath(genpath('c:\usr\myopen\MiniVIE'));
+%     addpath(genpath(pwd));
+%     addpath(genpath('/Users/chanp1/myopen'));
+    
+    % cd c:\usr\myopen\MiniVIE
+end
+
 % options
 
 useFlock = 1; % master switch to enable the flock of birds
 
-FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
-flockCOMstr = 'COM1'; % select the comm port
+FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+flockCOMstr = 'COM4'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
 useAvoidance = 1; % whether to avoid the flock
 maximumRepelDistance = 500; %mm, max distance to consider avoidance 
 closestAllowedApproach = 200; % mm
-%%
-
-% setpaths
-if ~exist('MiniVIE')
-    addpath(genpath(pwd));
-    addpath(genpath('/Users/chanp1/myopen'));
-    
-    % cd c:\usr\myopen\MiniVIE
-end
-
-% constant
-m2mm = 1e3;
-
-%Setup communication to robot
-MiniVIE.configurePath
-import Presentation.CytonI.*
-
-%Controls the VIE plant
-hCyton=CytonI;
-% obj.hCyton = hCyton; %strange usage
-
-%Syncs up with the actual robot
-%  hCyton.connectToHardware('COM5')
-
-% Get dh parameter constants
-%     [xform, a, d] = hCyton.hControls.getDHParams();
-
-% init command to all zeros
-q=[0 0 0 0 0 0 0 0].';
-hCyton.setJointParameters(q);
-hCyton.hPlant.ApplyLimits=true;
-
-timeStep = 10; % tuneable parameter that controls speed -
-% can be dynamic based on the distance from the goal
-
-% compute the goal position, units of mm
-% trajx = chooses goal trajectory
-% trajx = 0  is original test goal trajectory
-% trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
-% trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
-% trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 0;
-switch trajx
-    case 0
-        xtraj = zeros(1,8)-300;
-        ytraj = [zeros(1,4)-100,zeros(1,4)];
-        ztraj = [100 200 300 350 350 300 200 100];
-        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
-    case 1
-        xtraj = [-400:20:400];
-        ztraj = [ones(1,length(xtraj))*200];
-        ytraj = [100*sin((xtraj/100)*pi)+100];
-        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
-    case 2
-        rady= 200;
-        xseed1 = [200:-50:-200];
-        xseed2 = [-150:50:200];
-        yseed1 = [sqrt(rady^2-xseed1.^2)];
-        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
-        zseed1 = [50*sin((xseed1./200)*pi)+200];
-        zseed2 = [50*sin((xseed2./200)*pi)+200];
-        xtraj = [xseed1,xseed2];
-        ytraj = [yseed1,yseed2];
-        ztraj = [zseed1,zseed2];
-        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
-    case 3
-        startPt=[-200;-200;100;1];
-        posZ = makehgtform('translate',[0 0 100]);
-        negZ = makehgtform('translate',[0 0 -100]);
-        posY = makehgtform('translate',[0 400 0]);
-        negY = makehgtform('translate',[0 -400 0]);
-        posX = makehgtform('translate',[400 0 0]);
-        negX = makehgtform('translate',[-400 0 0]);
-        pt1=posZ*startPt;
-        pt2=posY*pt1;
-        pt3=negZ*pt2;
-        pt4=posZ*pt3;
-        pt5=posX*pt4;
-        pt6=negZ*pt5;
-        pt7=posZ*pt6;
-        pt8=negY*pt7;
-        pt9=negZ*pt8;
-        pt10=posZ*pt9;
-        pt11=negX*pt10;
-        goalTraj=[startPt(1:3)';pt1(1:3)';pt2(1:3)';pt3(1:3)';pt4(1:3)';
-            pt5(1:3)';pt6(1:3)';pt7(1:3)';pt8(1:3)';pt9(1:3)';pt10(1:3)';
-            pt11(1:3)'];
-end
-%goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
-
-% set the initial trajectory target position
-i = 1; % index to traj
-goalPos = goalTraj(i,:).';
-hCyton.hDisplay.setTarget(goalPos);
-
 
 %% Flock of birds data
 if useFlock
@@ -150,6 +66,101 @@ if useFlock
     end
 end
 
+
+%%
+
+
+
+% constant
+m2mm = 1e3;
+
+%Setup communication to robot
+MiniVIE.configurePath
+import Presentation.CytonI.*
+
+%Controls the VIE plant
+hCyton=CytonI;
+% obj.hCyton = hCyton; %strange usage
+
+%Syncs up with the actual robot
+hCyton.connectToHardware('COM1')
+
+% Get dh parameter constants
+%     [xform, a, d] = hCyton.hControls.getDHParams();
+
+% init command to all zeros
+q=[0 0 0 0 0 0 0 0].';
+hCyton.setJointParameters(q);
+hCyton.hPlant.ApplyLimits=true;
+
+timeStep = 10; % tuneable parameter that controls speed -
+% can be dynamic based on the distance from the goal
+
+% compute the goal position, units of mm
+% trajx = chooses goal trajectory
+% trajx = 0  is original test goal trajectory
+% trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
+% trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
+% trajx = 3  is a box motion; quirky, will work on singularities.
+trajx = 4;
+switch trajx
+    case 0
+        xtraj = zeros(1,8)-300;
+        ytraj = [zeros(1,4)-100,zeros(1,4)];
+        ztraj = [100 200 300 350 350 300 200 100];
+        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
+    case 1
+        xtraj = [200:20:400];
+        ztraj = [ones(1,length(xtraj))*200];
+        ytraj = [100*sin((xtraj/100)*pi)+100];
+        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
+    case 2
+        rady= 200;
+        xseed1 = [200:-50:-200];
+        xseed2 = [-150:50:200];
+        yseed1 = [sqrt(rady^2-xseed1.^2)];
+        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
+        zseed1 = [50*sin((xseed1./200)*pi)+200];
+        zseed2 = [50*sin((xseed2./200)*pi)+200];
+        xtraj = [xseed1,xseed2];
+        ytraj = [yseed1,yseed2];
+        ztraj = [zseed1,zseed2];
+        goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
+    case 3
+        startPt=[-200;-200;100;1];
+        posZ = makehgtform('translate',[0 0 100]);
+        negZ = makehgtform('translate',[0 0 -100]);
+        posY = makehgtform('translate',[0 400 0]);
+        negY = makehgtform('translate',[0 -400 0]);
+        posX = makehgtform('translate',[400 0 0]);
+        negX = makehgtform('translate',[-400 0 0]);
+        pt1=posZ*startPt;
+        pt2=posY*pt1;
+        pt3=negZ*pt2;
+        pt4=posZ*pt3;
+        pt5=posX*pt4;
+        pt6=negZ*pt5;
+        pt7=posZ*pt6;
+        pt8=negY*pt7;
+        pt9=negZ*pt8;
+        pt10=posZ*pt9;
+        pt11=negX*pt10;
+        goalTraj=[startPt(1:3)';pt1(1:3)';pt2(1:3)';pt3(1:3)';pt4(1:3)';
+            pt5(1:3)';pt6(1:3)';pt7(1:3)';pt8(1:3)';pt9(1:3)';pt10(1:3)';
+            pt11(1:3)'];
+    case 4
+        goalTraj=[0 0 400; 200 0 300];
+end
+%goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
+
+% set the initial trajectory target position
+i = 1; % index to traj
+goalPos = goalTraj(i,:).';
+hCyton.hDisplay.setTarget(goalPos);
+
+
+
+
 counter = 0; % init run counter
 keepRunning = 1; % init
 while  keepRunning
@@ -163,6 +174,7 @@ while  keepRunning
     %% update the flock
     if useFlock
         if FlockLive % using the real live flock
+            flockPos_prev = flockPos; % save 
             [flockPos] = objFlock.getBirdGroup; % get the points from the Flock
             %flockPos  indexed by bird, coordinate 1:3
             
@@ -171,10 +183,20 @@ while  keepRunning
                 % tranform the flock data to the robot frame
                 flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*m2mm;
                 flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
+                flockPos(:,1:2) = flockPos(:,1:2) - 200;
+                flockPos(:,1) = flockPos(:,1)-70;
+                flockPos(:,2) = flockPos(:,2)+130;
+                A = makehgtform('zrotate',pi);
+                A = A(1:3,1:3);
+                flockPos(1,:) = (A*flockPos(1,:).').';
+                flockPos(2,:) = (A*flockPos(2,:).').';
+                
                 
                 % plot the birds on the VIE
                 hCyton.hDisplay.setBird1(flockPos(1,:));
                 hCyton.hDisplay.setBird2(flockPos(2,:));
+            else
+                flockPos = flockPos_prev;
             end
         else % use recorded data
             ibird = ibird+1; %increment
