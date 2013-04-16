@@ -249,7 +249,7 @@ while  keepRunning
                     % velocity is parabolic with zero at the
                     % maximumRepelDistance and matches timeStep at the
                     % closestAllowedApproach
-                    repelMag = (maximumRepelDistance-repelDist)^2*timeStep/closestAllowedApproach^2;
+                    repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
                     repelVelocity = repelMag*repelVec/repelDist;
                     
                     % vector sum of repel and command velocity
