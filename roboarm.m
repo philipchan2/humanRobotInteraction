@@ -92,7 +92,7 @@ hCyton.hPlant.ApplyLimits=true;
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 4;
+trajx = 2;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -106,38 +106,43 @@ switch trajx
         goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
     case 2
         rady= 200;
-        xseed1 = [200:-50:-200];
-        xseed2 = [-150:50:200];
-        yseed1 = [sqrt(rady^2-xseed1.^2)];
-        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
-        zseed1 = [50*sin((xseed1./200)*pi)+200];
-        zseed2 = [50*sin((xseed2./200)*pi)+200];
-        xtraj = [xseed1,xseed2];
-        ytraj = [yseed1,yseed2];
-        ztraj = [zseed1,zseed2];
+        xseed1 = [0:-5:-200];
+%        xseed2 = [-150:50:200];
+        yseed1 = -1*[sqrt(rady^2-xseed1.^2)];
+%        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
+        zseed1 = [200*sin((xseed1./100)*pi)+200];
+%        zseed2 = [50*sin((xseed2./200)*pi)+200];
+        xtraj = [xseed1];
+        ytraj = [yseed1];
+        ztraj = [zseed1];
         goalTraj=[xtraj(:),ytraj(:),ztraj(:)];
     case 3
-        startPt=[-200;-200;100;1];
+        startPt=[-100;-100;300;1];
         posZ = makehgtform('translate',[0 0 100]);
         negZ = makehgtform('translate',[0 0 -100]);
-        posY = makehgtform('translate',[0 400 0]);
-        negY = makehgtform('translate',[0 -400 0]);
-        posX = makehgtform('translate',[400 0 0]);
-        negX = makehgtform('translate',[-400 0 0]);
-        pt1=posZ*startPt;
-        pt2=posY*pt1;
-        pt3=negZ*pt2;
-        pt4=posZ*pt3;
-        pt5=posX*pt4;
-        pt6=negZ*pt5;
-        pt7=posZ*pt6;
+        posY = makehgtform('translate',[0 100 0]);
+        negY = makehgtform('translate',[0 -50 0]);
+        posX = makehgtform('translate',[100 0 0]);
+        negX = makehgtform('translate',[-50 0 0]);
+        pt1=negZ*startPt;
+        pt2=posZ*pt1;
+        pt3=negX*pt2;
+        pt4=negX*pt3;
+        pt5=negZ*pt4;
+        pt6=posZ*pt5;
+        pt7=negY*pt6;
         pt8=negY*pt7;
         pt9=negZ*pt8;
         pt10=posZ*pt9;
-        pt11=negX*pt10;
+        pt11=posX*pt10;
+        pt12=posX*pt11;
+        pt13=negZ*pt12;
+        pt14=posZ*pt13;
+        pt15=posY*pt14;
+        pt16=posY*pt15;
         goalTraj=[startPt(1:3)';pt1(1:3)';pt2(1:3)';pt3(1:3)';pt4(1:3)';
             pt5(1:3)';pt6(1:3)';pt7(1:3)';pt8(1:3)';pt9(1:3)';pt10(1:3)';
-            pt11(1:3)'];
+            pt11(1:3)';pt12(1:3)';pt13(1:3)';pt14(1:3)';pt15(1:3)';pt16(1:3)'];
     case 4
         goalTraj=[0 0 400; 200 0 300];
 end
