@@ -1,11 +1,12 @@
+%Robot#2
 clear; close all;clc
 % cleanup
 %% setpaths
 if ~exist('MiniVIE')
     
-%     addpath(genpath('c:\usr\myopen\MiniVIE')); %in lab
+    %     addpath(genpath('c:\usr\myopen\MiniVIE')); %in lab
     
-%     on Mac laptop
+    %     on Mac laptop
     addpath(genpath(pwd));
     addpath(genpath('/Users/chanp1/myopen'));
 end
@@ -19,12 +20,12 @@ flockCOMstr = 'COM4'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
 useAvoidance = 0; % whether to avoid the flock
-maximumRepelDistance = 500; %mm, max distance to consider avoidance 
-closestAllowedApproach = 200; % mm
+maximumRepelDistance = 500; %mm, max distance to consider avoidance
+closestAllowedApproach = 300; % mm
 
 useAttraction = 1;
 maximumAttractDistance = 500;
-closestAttractApproach = 200;
+closestAttractApproach = 300;
 
 timeStep = 20; % tuneable parameter that controls speed of robot
 % can be dynamic based on the distance from the goal
@@ -34,14 +35,14 @@ timeStep = 20; % tuneable parameter that controls speed of robot
 m2mm = 1e3;
 %% Flock of birds setup
 if useFlock
-
+    
     if FlockLive
         % setup the flock data
         % Requires MiniVIE Utilities
         objFlock = Inputs.FlockOfBirds;
         objFlock.NumSensors = 1; % using birds 1 and 2
         objFlock.initialize(flockCOMstr);% connect to the system
-
+        
         % init flockPos to arbitrary value
         flockPos(1:2,1:3) = 1000; % outside of the workspace
         
@@ -85,10 +86,12 @@ hCyton=CytonI;
  hCyton.connectToHardware('COM1')
 
 % init command to all zeros
-q=[0 0 0 0 0 0 0 0].';
+% q=hCyton.JointParameters;
+%q=[0 0 0 0 0 0 0 0].';
+q=[-60 -75 0 0 0 0 0 0].'*pi/180;% smart starting point
 hCyton.setJointParameters(q);
 hCyton.hPlant.ApplyLimits=true;
-
+% joint 2 offset = 0.1;
 
 %% compute the goal position, units of mm
 % trajx = chooses goal trajectory
@@ -96,7 +99,7 @@ hCyton.hPlant.ApplyLimits=true;
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 1;
+trajx = 4;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -111,11 +114,11 @@ switch trajx
     case 2
         rady= 200;
         xseed1 = [0:-5:-200];
-%        xseed2 = [-150:50:200];
+        %        xseed2 = [-150:50:200];
         yseed1 = -1*[sqrt(rady^2-xseed1.^2)];
-%        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
+        %        yseed2 = -1*[sqrt(rady^2-xseed2.^2)];
         zseed1 = [200*sin((xseed1./100)*pi)+200];
-%        zseed2 = [50*sin((xseed2./200)*pi)+200];
+        %        zseed2 = [50*sin((xseed2./200)*pi)+200];
         xtraj = [xseed1];
         ytraj = [yseed1];
         ztraj = [zseed1];
@@ -148,8 +151,21 @@ switch trajx
             pt5(1:3)';pt6(1:3)';pt7(1:3)';pt8(1:3)';pt9(1:3)';pt10(1:3)';
             pt11(1:3)';pt12(1:3)';pt13(1:3)';pt14(1:3)';pt15(1:3)';pt16(1:3)'];
     case 4
-        goalTraj=[0 0 400; 200 0 300];
+        goalTraj=[
+            200 -100 0
+            350 -250 0
+            400 -150 0
+            400 150 0
+            320 -50 0];
+        goalTraj(:,2)=goalTraj(:,2)-200; %Make edit to do correction 
+                            %if trying to get to a point outside of reachable space
 end
+% saved points that are marked and in the usable space
+pointA = [200 -100 0];
+pointB = [350 -250 0];
+pointC = [400 -150 0];
+pointD = [400 150 0];
+pointE = [320   -50     0];
 
 % set the initial trajectory target position
 i = 1; % index to traj
@@ -170,19 +186,19 @@ while  keepRunning
                 
                 % tranform the flock data to the robot frame
                 flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*m2mm;
-%                 flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
-%                 flockPos(:,1:2) = flockPos(:,1:2) - 200;
-%                 flockPos(:,1) = flockPos(:,1)-70;
-%                 flockPos(:,2) = flockPos(:,2)+130;
-%                 A = makehgtform('zrotate',pi);
-%                 A = A(1:3,1:3);
-%                 flockPos(1,:) = (A*flockPos(1,:).').';
-%                 flockPos(2,:) = (A*flockPos(2,:).').';
+                %                 flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
+                %                 flockPos(:,1:2) = flockPos(:,1:2) - 200;
+                %                 flockPos(:,1) = flockPos(:,1)-70;
+                %                 flockPos(:,2) = flockPos(:,2)+130;
+                %                 A = makehgtform('zrotate',pi);
+                %                 A = A(1:3,1:3);
+                %                 flockPos(1,:) = (A*flockPos(1,:).').';
+                %                 flockPos(2,:) = (A*flockPos(2,:).').';
                 
                 
                 % plot the birds on the VIE
                 hCyton.hDisplay.setBird1(flockPos(1,:));
-%                 hCyton.hDisplay.setBird2(flockPos(2,:));
+                %                 hCyton.hDisplay.setBird2(flockPos(2,:));
             else
                 % no data returned
                 flockPos = flockPos_prev; % keep the flock in the same place
@@ -214,7 +230,14 @@ while  keepRunning
         if i > size(goalTraj,1), i=1; end % loop back to the beginning
         
         goalPos = goalTraj(i,:).';
+        tempDist = norm(goalPos); % mag
+        if tempDist > 400
+            goalPos = goalPos/tempDist*400; % set to be 400 long
+        end
+        
         hCyton.hDisplay.setTarget(goalPos);
+        beep; beep;
+%         keyboard
         
         %         keepRunning = 0;
         %         disp('goal reached')
@@ -245,7 +268,7 @@ while  keepRunning
                 % flockPos, position of the two birds
                 % endeffPos, effector position
                 repelPos = flockPos(1,:); % select a bird
-%                 repelPos = goalTraj(4,:); % avoid a goal point
+                %                 repelPos = goalTraj(4,:); % avoid a goal point
                 
                 
                 repelVec = endeffPos.' - repelPos; % vector of repulsion
@@ -265,11 +288,11 @@ while  keepRunning
                     
                 else % free movement, don't change the command
                 end
-            elseif useAttraction && useFlock %--- Attraction/Chase sequence  
+            elseif useAttraction && useFlock %--- Attraction/Chase sequence
                 % flockPos, position of the two birds
                 % endeffPos, effector position
                 repelPos = flockPos(1,:); % select a bird
-%                 repelPos = goalTraj(4,:); % avoid a goal point
+                %                 repelPos = goalTraj(4,:); % avoid a goal point
                 
                 repelVec = endeffPos.' - repelPos; % vector of repulsion
                 repelDist = norm(repelVec); % 3D distance, mm
@@ -298,7 +321,7 @@ while  keepRunning
         % command the robot position in joint space q
         hCyton.setJointParameters(q);
         
-        pause(1); % wait
+        pause(.5); % wait
         
     end
 end
