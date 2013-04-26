@@ -12,18 +12,19 @@ if ~exist('MiniVIE')
 end
 
 %% options
+useVelocityControl = 1; % whether to use velocity-only control
 
-useFlock = 0; % master switch to enable the flock of birds
+useFlock = 1; % master switch to enable the flock of birds
 
-FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
+FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
 flockCOMstr = 'COM4'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
-useAvoidance = 0; % whether to avoid the flock
+useAvoidance = 1; % whether to avoid the flock
 maximumRepelDistance = 500; %mm, max distance to consider avoidance
 closestAllowedApproach = 300; % mm
 
-useAttraction = 1;
+useAttraction = 0;
 maximumAttractDistance = 500;
 closestAttractApproach = 300;
 
@@ -40,7 +41,7 @@ if useFlock
         % setup the flock data
         % Requires MiniVIE Utilities
         objFlock = Inputs.FlockOfBirds;
-        objFlock.NumSensors = 1; % using birds 1 and 2
+        objFlock.NumSensors = 2; % using birds 1 and 2
         objFlock.initialize(flockCOMstr);% connect to the system
         
         % init flockPos to arbitrary value
@@ -89,8 +90,9 @@ hCyton.connectToHardware('COM1')
 % q=hCyton.JointParameters;
 %q=[0 0 0 0 0 0 0 0].';
 q=[-60 -75 0 0 0 0 0 0.6].'*pi/180;% smart starting point
-hCyton.setJointParameters(q);
+hCyton.setJointParameters(q);pause(4)
 hCyton.hPlant.ApplyLimits=true;
+
 % joint 2 offset = 0.1;
 
 %% compute the goal position, units of mm
@@ -99,7 +101,7 @@ hCyton.hPlant.ApplyLimits=true;
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 5;
+trajx = 6;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -157,18 +159,22 @@ switch trajx
             400 -150 0
             400 150 0
             320 -50 0];
-        goalTraj(:,2)=goalTraj(:,2); %Make edit to do correction 
-                            %if trying to get to a point outside of reachable space
-        goalOrient= [0  0 -1; 0 -1 0; -1 0 0]; 
+        goalTraj(:,2)=goalTraj(:,2); %Make edit to do correction
+        %if trying to get to a point outside of reachable space
+        goalOrient= [0  0 -1; 0 -1 0; -1 0 0];
     case 5 % Arc of points
         goalTraj=[
             368 -14  46
-            %320 -14  218
-            %250 -270 46
-            %250 -270 218
-            %352 -108 46
+            320 -14  218
+            250 -270 46
+            250 -270 218
+            352 -108 46
             ]
-       goalOrient= [0  0 1; 0 1 0; -1 0 0]; 
+        goalOrient= [0  0 1; 0 1 0; -1 0 0];
+    case 6
+        % go up and down
+        goalTraj=[ repmat([0 -300],20,1), [linspace(0,350,10) -1*linspace(0,350,10)+350].'];
+        
 end
 % saved points that are marked and in the usable space
 pointA = [200 -100 0];
@@ -194,21 +200,13 @@ while  keepRunning
             
             if ~isempty(flockPos) % if returned data
                 
-                % tranform the flock data to the robot frame
+                % transform the flock data to the robot frame
                 flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*m2mm;
-                %                 flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
-                %                 flockPos(:,1:2) = flockPos(:,1:2) - 200;
-                %                 flockPos(:,1) = flockPos(:,1)-70;
-                %                 flockPos(:,2) = flockPos(:,2)+130;
-                %                 A = makehgtform('zrotate',pi);
-                %                 A = A(1:3,1:3);
-                %                 flockPos(1,:) = (A*flockPos(1,:).').';
-                %                 flockPos(2,:) = (A*flockPos(2,:).').';
-                
+                flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
                 
                 % plot the birds on the VIE
                 hCyton.hDisplay.setBird1(flockPos(1,:));
-                %                 hCyton.hDisplay.setBird2(flockPos(2,:));
+                hCyton.hDisplay.setBird2(flockPos(2,:));
             else
                 % no data returned
                 flockPos = flockPos_prev; % keep the flock in the same place
@@ -234,30 +232,34 @@ while  keepRunning
     commandVector = goalPos - endeffPos;
     posDiff = norm(commandVector);
     
-    % compute the rotation between goal and current orientation wrt base
-    commandRot = inv(endeffOrient)*goalOrient;
-    rotAxis = cross(endeffOrient(:,1)/norm(endeffOrient(:,1)),goalOrient(:,1)/norm(goalOrient(:,1)));
-    magRot  = norm(endeffOrient(:,1))*norm(goalOrient(:,1))*sin(pi/6);
-    wmove = magRot*commandRot*rotAxis;
-    % if the goal is reached, stop
-    goalMargin = 10;
+    if ~useVelocityControl
+        % compute the rotation between goal and current orientation wrt base
+        commandRot = inv(endeffOrient)*goalOrient;
+        rotAxis = cross(endeffOrient(:,1)/norm(endeffOrient(:,1)),goalOrient(:,1)/norm(goalOrient(:,1)));
+        magRot  = norm(endeffOrient(:,1))*norm(goalOrient(:,1))*sin(pi/6);
+        wmove = magRot*commandRot*rotAxis;
+    end
+    
+    % if the goal is reached, go to the next position
+    goalMargin = 10; % mm
     
     if posDiff < goalMargin % within some margin
         i = i+1; % increment
         if i > size(goalTraj,1), i=1; end % loop back to the beginning
         
         goalPos = goalTraj(i,:).';
-        tempDist = norm(goalPos); % mag
-        if tempDist > 400
-            goalPos = goalPos/tempDist*400; % set to be 400 long
+        
+        if 1
+            % Limit the goal position to within the workspace reach
+            tempDist = norm(goalPos); % mag
+            if tempDist > 400
+                goalPos = goalPos/tempDist*400; % set to be 400 long
+            end
         end
         
-        hCyton.hDisplay.setTarget(goalPos);
-        beep; beep;
-%         keyboard
-        
-        %         keepRunning = 0;
-        %         disp('goal reached')
+        hCyton.hDisplay.setTarget(goalPos); % update the display
+        %         beep; beep; % alarm when goal reached
+        %         keyboard
         
     else
         % compute the unit vector scaled by timeStep
@@ -265,30 +267,29 @@ while  keepRunning
         commandVector = commandVector/norm(commandVector)*timeStep;
         
         % get the command/desired velocity vector
-        if 0
-            commandVel= [commandVector.' 0 0 0]; % set orientations to zero
-            % this has problems because the orientation is locked
-            % get the Jacobian and pseudoinverse
-            q    = hCyton.JointParameters;
-            numJ = hCyton.hControls.numericJacobian(q);
-            invJ = pinv(numJ);
-            
-            % compute the joint rates to realize the motion
-            qdot = invJ*commandVel';
-            
-            % use the time step to compute the command position
-            q    = q + [qdot; 0]; % the last command is for the gripper
+        
+        if useVelocityControl
+            % use velocity only control
+            % set orientations to do-not-care
+            commandVel= [commandVector.' nan nan nan]; 
         else
-           % commandVel= [commandVector.' nan nan nan]; % set orientations to do-not-care
+            % set the velocity and angular velocity
             commandVel= [commandVector.' wmove'];
-            if useAvoidance && useFlock % change the command 3D velocity to avoid the flock
-                % flockPos, position of the two birds
-                % endeffPos, effector position
-                repelPos = flockPos(1,:); % select a bird
-                %                 repelPos = goalTraj(4,:); % avoid a goal point
-                
-                
-                repelVec = endeffPos.' - repelPos; % vector of repulsion
+        end
+        
+        
+        if useAvoidance && useFlock % change the command 3D velocity to avoid the flock
+            % flockPos, position of the two birds
+            % endeffPos, effector position
+            
+            % select points to be sources of repulsion
+            % repelPos = flockPos(1,:); % select a bird
+            repelPos = flockPos; % select all birds
+            
+            numRepellers = size(repelPos,1);
+            % be repelled by all positions in repelPos
+            for iRepel = 1:numRepellers
+                repelVec = endeffPos.' - repelPos(iRepel,:); % vector of repulsion
                 repelDist = norm(repelVec); % 3D distance, mm
                 
                 if repelDist <= maximumRepelDistance
@@ -305,49 +306,53 @@ while  keepRunning
                     
                 else % free movement, don't change the command
                 end
-            elseif useAttraction && useFlock %--- Attraction/Chase sequence
-                % flockPos, position of the two birds
-                % endeffPos, effector position
-                repelPos = flockPos(1,:); % select a bird
-                %                 repelPos = goalTraj(4,:); % avoid a goal point
-                
-                repelVec = endeffPos.' - repelPos; % vector of repulsion
-                repelDist = norm(repelVec); % 3D distance, mm
-                
-                if repelDist <= maximumRepelDistance
-                    %generate an attraction velocity from the attraction position
-                    
-                    % velocity is parabolic with zero at the
-                    % maximumAttractDistance and matches timeStep at the
-                    % closestAllowedApproach
-                    repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
-                    repelVelocity = -repelMag*repelVec/repelDist;
-                    
-                    % vector sum of repel and command velocity
-                    %commandVel(1:3) = commandVel(1:3) + repelVelocity;
-                    commandVel(1:3) = repelVelocity;
-                else % free movement, don't change the command
-                end
             end
-            [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
+        elseif useAttraction && useFlock %--- Attraction/Chase sequence
+            % flockPos, position of the two birds
+            % endeffPos, effector position
+            repelPos = flockPos(1,:); % select a bird
+            %                 repelPos = goalTraj(4,:); % avoid a goal point
             
-            % use the time step to compute the command position
-            q    = q + [qdot]; % the last command is for the gripper
+            repelVec = endeffPos.' - repelPos; % vector of repulsion
+            repelDist = norm(repelVec); % 3D distance, mm
             
-%             numJ = hCyton.hControls.numericJacobian(q);
-%             
-%             %No Jw contribution from 5,6
-%             numJ(4:6,5:6)=0;
-%             numJ(1:3,5:6)=0;
-%             invJ = pinv(numJ);
-%             
-%             % compute the joint rates to realize the motion
-%             qdot = invJ*commandVel';
-%             
-%             % use the time step to compute the command position
-%             q    = q + [qdot; 0]; % the last command is for the gripper
-            
+            if repelDist <= maximumRepelDistance
+                %generate an attraction velocity from the attraction position
+                
+                % velocity is parabolic with zero at the
+                % maximumAttractDistance and matches timeStep at the
+                % closestAllowedApproach
+                repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
+                repelVelocity = -repelMag*repelVec/repelDist;
+                
+                % vector sum of repel and command velocity
+                %commandVel(1:3) = commandVel(1:3) + repelVelocity;
+                
+                commandVel(1:3) = repelVelocity; % use attraction only
+                
+            else % free movement, don't change the command
+            end
         end
+        [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
+        
+        
+        % compute the command position
+        q    = q + qdot; % the last command is for the gripper
+        
+        %             numJ = hCyton.hControls.numericJacobian(q);
+        %
+        %             %No Jw contribution from 5,6
+        %             numJ(4:6,5:6)=0;
+        %             numJ(1:3,5:6)=0;
+        %             invJ = pinv(numJ);
+        %
+        %             % compute the joint rates to realize the motion
+        %             qdot = invJ*commandVel';
+        %
+        %             % use the time step to compute the command position
+        %             q    = q + [qdot; 0]; % the last command is for the gripper
+        
+        
         
         % command the robot position in joint space q
         hCyton.setJointParameters(q);
@@ -356,65 +361,3 @@ while  keepRunning
         
     end
 end
-
-
-
-
-
-
-
-
-return
-
-% for x=100:10:400;
-%
-%     %Planned trajectory of robot arm
-%     y = 300*sin(x);
-%     p = [x y 300];
-%
-%     %Create line segment for user forearm
-%     birdline = [outdata.bird1pos(1,:);outdata.bird2pos(1,:)]
-%     birdline_len = sqrt(sum((birdline(1,:)-birdline(2,:)).^2));
-%     bird_dir = (birdline(1,:)-birdline(2,:))/birdline_len;
-%
-%     %Intersection
-%     %Check if robot end-effector intersects forearm
-%     %If intersection: Move up in z-direction
-%     %If no intersection: Robot continues to point p
-%     robo = p-outdata.bird1pos(1,:);
-%     robo_len = sqrt(robo.^2);
-%     robo_dir = robo/robo_len;
-%     if (robo_dir == bird_dir & robo_len<=birdline_len)
-%         p = [x y 400];
-%     end
-%     M = makehgtform('translate',p);
-%     hCyton.hDisplay.setTarget(M);
-%     %hCyton.hControls.goto(p);
-%
-%
-%
-% end
-
-%Test case1:
-%Set birdline to a direction that will not intersect with the planned
-%trajectory
-
-%Test case2:
-%Set birdline to intersect with planned trajectory
-
-% I've updated the Cyton VIE code based on some questions during class. The short version is that you should control the robot using the Jacobian directly. The setEndEffectorPose() and goto() methods are examples and don't account for joint limits and don't converge for every point in space.
-%
-% An example of this can be seen here:
-%
-% >> Presentation.CytonI.CytonEndpointGui.Run
-% This function uses the Jacobian directly, as you should:
-%
-% % Get dh param constants
-% [~, a, d] = hCyton.hControls.getDHParams();
-%
-% % Get Jacobian at the current position
-% J_ = hCyton.hControls.symJacobianFull(a(6),d(2),d(3),d(4),d(5),d(6),q(1),q(2),q(3),q(4),q(5),q(6));
-% the next steps are to invert the jacobian, multiply by the desired velocity, and apply the joint velocities.
-% Using the -Z slider you can see the robot does behave well when it is not in contact with joint limits. However unexpected behavior results when the 'elbow' joint locks out. Think about why this is.
-%
-
