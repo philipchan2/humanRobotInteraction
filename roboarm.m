@@ -13,9 +13,9 @@ end
 
 %% options
 
-useFlock = 1; % master switch to enable the flock of birds
+useFlock = 0; % master switch to enable the flock of birds
 
-FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
 flockCOMstr = 'COM4'; % select the comm port
 diagonalShift = 1; % whether the live flock transmitter is set diagonally
 
@@ -83,12 +83,12 @@ import Presentation.CytonI.*
 hCyton=CytonI;
 
 %Syncs up with the actual robot
- hCyton.connectToHardware('COM1')
+hCyton.connectToHardware('COM1')
 
 % init command to all zeros
 % q=hCyton.JointParameters;
 %q=[0 0 0 0 0 0 0 0].';
-q=[-60 -75 0 0 0 0 0 0].'*pi/180;% smart starting point
+q=[-60 -75 0 0 0 0 0 0.6].'*pi/180;% smart starting point
 hCyton.setJointParameters(q);
 hCyton.hPlant.ApplyLimits=true;
 % joint 2 offset = 0.1;
@@ -99,7 +99,7 @@ hCyton.hPlant.ApplyLimits=true;
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 4;
+trajx = 5;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -157,8 +157,18 @@ switch trajx
             400 -150 0
             400 150 0
             320 -50 0];
-        goalTraj(:,2)=goalTraj(:,2)-200; %Make edit to do correction 
+        goalTraj(:,2)=goalTraj(:,2); %Make edit to do correction 
                             %if trying to get to a point outside of reachable space
+        goalOrient= [0  0 -1; 0 -1 0; -1 0 0]; 
+    case 5 % Arc of points
+        goalTraj=[
+            368 -14  46
+            %320 -14  218
+            %250 -270 46
+            %250 -270 218
+            %352 -108 46
+            ]
+       goalOrient= [0  0 1; 0 1 0; -1 0 0]; 
 end
 % saved points that are marked and in the usable space
 pointA = [200 -100 0];
@@ -217,14 +227,21 @@ while  keepRunning
     
     %get the current position of the end effector
     endeffPos = hCyton.hControls.getT_0_N;
+    endeffOrient = endeffPos(1:3,1:3);
     endeffPos = endeffPos(1:3,4);
     
     % compute the difference between the goal and current position
     commandVector = goalPos - endeffPos;
     posDiff = norm(commandVector);
     
+    % compute the rotation between goal and current orientation wrt base
+    commandRot = inv(endeffOrient)*goalOrient;
+    rotAxis = cross(endeffOrient(:,1)/norm(endeffOrient(:,1)),goalOrient(:,1)/norm(goalOrient(:,1)));
+    magRot  = norm(endeffOrient(:,1))*norm(goalOrient(:,1))*sin(pi/6);
+    wmove = magRot*commandRot*rotAxis;
     % if the goal is reached, stop
     goalMargin = 10;
+    
     if posDiff < goalMargin % within some margin
         i = i+1; % increment
         if i > size(goalTraj,1), i=1; end % loop back to the beginning
@@ -262,8 +279,8 @@ while  keepRunning
             % use the time step to compute the command position
             q    = q + [qdot; 0]; % the last command is for the gripper
         else
-            commandVel= [commandVector.' nan nan nan]; % set orientations to do-not-care
-            
+           % commandVel= [commandVector.' nan nan nan]; % set orientations to do-not-care
+            commandVel= [commandVector.' wmove'];
             if useAvoidance && useFlock % change the command 3D velocity to avoid the flock
                 % flockPos, position of the two birds
                 % endeffPos, effector position
@@ -316,6 +333,20 @@ while  keepRunning
             
             % use the time step to compute the command position
             q    = q + [qdot]; % the last command is for the gripper
+            
+%             numJ = hCyton.hControls.numericJacobian(q);
+%             
+%             %No Jw contribution from 5,6
+%             numJ(4:6,5:6)=0;
+%             numJ(1:3,5:6)=0;
+%             invJ = pinv(numJ);
+%             
+%             % compute the joint rates to realize the motion
+%             qdot = invJ*commandVel';
+%             
+%             % use the time step to compute the command position
+%             q    = q + [qdot; 0]; % the last command is for the gripper
+            
         end
         
         % command the robot position in joint space q
