@@ -12,9 +12,9 @@ if ~exist('MiniVIE')
 end
 
 %% options
-useVelocityControl = 1; % whether to use velocity-only control
+useVelocityControl = 0; % whether to use velocity-only control
 
-useFlock = 1; % master switch to enable the flock of birds
+useFlock = 0; % master switch to enable the flock of birds
 
 FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
 flockCOMstr = 'COM4'; % select the comm port
@@ -32,11 +32,11 @@ timeStep = 20; % tuneable parameter that controls speed of robot
 % can be dynamic based on the distance from the goal
 % The command velocity is vector with this magnitude, mm
 
-%% constant
-m2mm = 1e3;
+
 %% Flock of birds setup
+
 if useFlock
-    
+
     if FlockLive
         % setup the flock data
         % Requires MiniVIE Utilities
@@ -48,27 +48,7 @@ if useFlock
         flockPos(1:2,1:3) = 1000; % outside of the workspace
         
     else % using recorded Flock data
-        % example usage
-        % bird1 = [200 200  500];
-        % bird2 = [0 200 500];
-        % hCyton.hDisplay.setBird1(bird1);
-        % hCyton.hDisplay.setBird2(bird2);
-        diagonalShift = 0; % whether to shift diagonal
-        switch 1
-            case 0
-                % read the trajectory
-                load('flockSample_201345164355');
-            case 1
-                load('flockSampleDiag_201345164749');
-                diagonalShift = 1; % whether to shift diagonal
-        end
-        % outdata.time;
-        % outdata.bird1pos; % elbow
-        % outdata.bird2pos; % hand
-        
-        % adjustments
-        outdata.bird1pos = adjustFlockData(outdata.bird1pos,diagonalShift)*m2mm;
-        outdata.bird2pos = adjustFlockData(outdata.bird2pos,diagonalShift)*m2mm;
+        outdata = getRecordedFlockData();
         ibird = 0; % init index to bird data
     end
 end
@@ -84,16 +64,19 @@ import Presentation.CytonI.*
 hCyton=CytonI;
 
 %Syncs up with the actual robot
-hCyton.connectToHardware('COM1')
+% hCyton.connectToHardware('COM1')
 
-% init command to all zeros
-% q=hCyton.JointParameters;
-%q=[0 0 0 0 0 0 0 0].';
-q=[-60 -75 0 0 0 0 0 0.6].'*pi/180;% smart starting point
-hCyton.setJointParameters(q);pause(4)
 hCyton.hPlant.ApplyLimits=true;
 
-% joint 2 offset = 0.1;
+% init command to all zeros
+q=[0 0 0 0 0 0 0 0].';
+
+% get joint parameters
+% q=hCyton.JointParameters;
+
+% q=[-60 -75 0 0 0 0 0 0.6].'*pi/180;% smart starting point
+
+hCyton.setJointParameters(q); pause(3)
 
 %% compute the goal position, units of mm
 % trajx = chooses goal trajectory
@@ -169,13 +152,20 @@ switch trajx
             250 -270 46
             250 -270 218
             352 -108 46
-            ]
+            ];
+        % orientation of the x axis (out of the end effector)
         goalOrient= [0  0 1; 0 1 0; -1 0 0];
     case 6
         % go up and down
-        goalTraj=[ repmat([0 -300],20,1), [linspace(0,350,10) -1*linspace(0,350,10)+350].'];
+        goalTraj=[ repmat([0 -400],20,1), [linspace(100,350,10) -1*linspace(100,350,10)+350].'];
+        
+        %         useRadialOrientation = 1; % whether to set the orientation of the end effector to a radially outward direction
+        goalOrient = [1 -1 0].';
+        goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
         
 end
+if ~exist('useRadialOrientation', 'var'), useRadialOrientation=0;end
+
 % saved points that are marked and in the usable space
 pointA = [200 -100 0];
 pointB = [350 -250 0];
@@ -201,8 +191,8 @@ while  keepRunning
             if ~isempty(flockPos) % if returned data
                 
                 % transform the flock data to the robot frame
-                flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*m2mm;
-                flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*m2mm;
+                flockPos(1,:) = adjustFlockData(flockPos(1,:),diagonalShift)*1e3; % mm
+                flockPos(2,:) = adjustFlockData(flockPos(2,:),diagonalShift)*1e3;
                 
                 % plot the birds on the VIE
                 hCyton.hDisplay.setBird1(flockPos(1,:));
@@ -223,23 +213,15 @@ while  keepRunning
     end
     %% update the arm
     
-    %get the current position of the end effector
+    %get the current position of the end effector in the world frame
     endeffPos = hCyton.hControls.getT_0_N;
-    endeffOrient = endeffPos(1:3,1:3);
-    endeffPos = endeffPos(1:3,4);
+    endeffOrient = endeffPos(1:3,1:3); % orientation
+    endeffPos = endeffPos(1:3,4); % position
     
     % compute the difference between the goal and current position
     commandVector = goalPos - endeffPos;
     posDiff = norm(commandVector);
-    
-    if ~useVelocityControl
-        % compute the rotation between goal and current orientation wrt base
-        commandRot = inv(endeffOrient)*goalOrient;
-        rotAxis = cross(endeffOrient(:,1)/norm(endeffOrient(:,1)),goalOrient(:,1)/norm(goalOrient(:,1)));
-        magRot  = norm(endeffOrient(:,1))*norm(goalOrient(:,1))*sin(pi/6);
-        wmove = magRot*commandRot*rotAxis;
-    end
-    
+       
     % if the goal is reached, go to the next position
     goalMargin = 10; % mm
     
@@ -267,12 +249,32 @@ while  keepRunning
         commandVector = commandVector/norm(commandVector)*timeStep;
         
         % get the command/desired velocity vector
-        
         if useVelocityControl
             % use velocity only control
-            % set orientations to do-not-care
-            commandVel= [commandVector.' nan nan nan]; 
+            % set angular velocities to do-not-care
+            commandVel= [commandVector.' nan nan nan];
         else
+            
+            % compute the rotation between goal and current orientation wrt base
+            thetaPerTimeStep_rad = 5*pi/180; % angle to rotate the end effector each step
+   
+            if useRadialOrientation
+                % compute the goal orientation as the end effector position
+                % unit vector
+                goalOrient = endeffPos/norm(endeffPos);
+            end
+            
+            % compute the axis of rotation as the cross product of the
+            % current and desired frame x axis vector in the world frame
+            rotAxis = cross(endeffOrient(:,1),goalOrient(:,1));
+            
+            % compute the magnitude of the rotation for 1 time step
+            magRot  = thetaPerTimeStep_rad;
+            
+            % compute the angular velocity as the desired magnitude and the
+            % rotation axis unit vector
+            wmove = magRot*rotAxis/norm(rotAxis);          
+            
             % set the velocity and angular velocity
             commandVel= [commandVector.' wmove'];
         end
@@ -333,27 +335,12 @@ while  keepRunning
             else % free movement, don't change the command
             end
         end
+        
         [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
-        
-        
+                
         % compute the command position
-        q    = q + qdot; % the last command is for the gripper
-        
-        %             numJ = hCyton.hControls.numericJacobian(q);
-        %
-        %             %No Jw contribution from 5,6
-        %             numJ(4:6,5:6)=0;
-        %             numJ(1:3,5:6)=0;
-        %             invJ = pinv(numJ);
-        %
-        %             % compute the joint rates to realize the motion
-        %             qdot = invJ*commandVel';
-        %
-        %             % use the time step to compute the command position
-        %             q    = q + [qdot; 0]; % the last command is for the gripper
-        
-        
-        
+        q = q + qdot; % qdot is already scaled by time
+         
         % command the robot position in joint space q
         hCyton.setJointParameters(q);
         
