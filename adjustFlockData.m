@@ -20,7 +20,7 @@ A4 = makehgtform('zrotate',pi);
 
 for i = 1:size(pos,1) % loop over rows
     
-    A = makehgtform('translate',[0 -200 0]/1000)*A4*A3*A1*A2*makehgtform('translate',pos(i,:)); %bird position
+    A = makehgtform('translate',[-80 -50 0]/1000)*A4*A3*A1*A2*makehgtform('translate',pos(i,:)); %bird position
 
     out(i,:) = A(1:3,4).'; %save position data
    
