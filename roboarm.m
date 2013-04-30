@@ -319,15 +319,14 @@ while  keepRunning
                 end
             end
         elseif useAttraction && useFlock %--- Attraction/Chase sequence
-            % flockPos, position of the two birds
-            % endeffPos, effector position
+
             repelPos = flockPos(1,:); % select a bird
-            %                 repelPos = goalTraj(4,:); % avoid a goal point
-            
+             
             repelVec = endeffPos.' - repelPos; % vector of repulsion
             repelDist = norm(repelVec); % 3D distance, mm
             
-            if repelDist <= maximumRepelDistance
+            attractionGoal = 10; % mm
+            if repelDist > attractionGoal
                 %generate an attraction velocity from the attraction position
                 
                 % velocity is parabolic with zero at the
@@ -336,13 +335,20 @@ while  keepRunning
                 repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
                 repelVelocity = -repelMag*repelVec/repelDist;
                 
-                % vector sum of repel and command velocity
-                %commandVel(1:3) = commandVel(1:3) + repelVelocity;
-                
-                commandVel(1:3) = repelVelocity; % use attraction only
-                
-            else % free movement, don't change the command
+                if 0
+                    % vector sum of repel and command velocity
+                    commandVel(1:3) = commandVel(1:3) + repelVelocity;
+                else
+                    % use attraction only without other goal
+                    commandVel(1:3) = repelVelocity;
+                end
+            else
+                % no velocity
+                commandVel(1:3) = [0 0 0];
+                % this may cause some jitter in the robot - consider using
+                % a flag to toggle motion on and off
             end
+ 
         end
         
         [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
@@ -353,7 +359,7 @@ while  keepRunning
         % command the robot position in joint space q
         hCyton.setJointParameters(q);
         
-        pause(.5); % wait
+        pause(1); % wait
         
     end
 end
