@@ -23,6 +23,7 @@ diagonalShift = 1; % whether the live flock transmitter is set diagonally
 useAvoidance = 1; % whether to avoid the flock
 maximumRepelDistance = 500; %mm, max distance to consider avoidance
 closestAllowedApproach = 300; % mm
+useCAAbasedOnFlockSeparation = 1; % whether to bind the closestAllowedApproach to the bird1-bird2 separation
 
 useAttraction = 0;
 maximumAttractDistance = 500;
@@ -300,6 +301,14 @@ while  keepRunning
                     % velocity is parabolic with zero at the
                     % maximumRepelDistance and matches timeStep at the
                     % closestAllowedApproach
+                    
+                    if useCAAbasedOnFlockSeparation
+                        % modify the closestAllowedApproach based on the separation between birds
+                        distBird2bird = flockPos(1,:) - flockPos(2,:); %requires 2 birds
+                        distBird2bird = norm(distBird2bird); % magnitude
+                        closestAllowedApproach = distBird2bird; % set the closest allowed approach
+                    end
+                    
                     repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
                     repelVelocity = repelMag*repelVec/repelDist;
                     
