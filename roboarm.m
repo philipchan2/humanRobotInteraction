@@ -12,26 +12,88 @@ if ~exist('MiniVIE')
 end
 
 %% options
-useVelocityControl = 1; % whether to use velocity-only control
+robotCOMstr = 'COM1';
+flockCOMstr = 'COM4'; % select the comm ports
 
-useFlock = 1; % master switch to enable the flock of birds
 
-FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
-flockCOMstr = 'COM4'; % select the comm port
-diagonalShift = 1; % whether the live flock transmitter is set diagonally
+modeString = 'demoCalibration'; 
+% demoCalibration 
+% demoAvoidance1
+% demoOrientationControl
+% manual
 
-useAvoidance = 1; % whether to avoid the flock
-maximumRepelDistance = 500; %mm, max distance to consider avoidance
-closestAllowedApproach = 300; % mm
-useCAAbasedOnFlockSeparation = 1; % whether to bind the closestAllowedApproach to the bird1-bird2 separation
+switch modeString
+    case 'demoCalibration'
+        % Settings for the demonstration calibration between the Flock and
+        % the robot. Use this mode to make adjustments to the robot
+        % location, transmitter location, or the tranform between the two
+        % frames. End effector fully attractive to bird 1.
+        useVelocityControl = 1; % whether to use velocity-only control
+        useFlock = 1; % master switch to enable the flock of birds
+        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+        diagonalShift = 1; % whether the live flock transmitter is set diagonally
+        
+        useAvoidance = 0; % whether to avoid the flock
+        useAttraction = 1;
+        timeStep = 10; % move 1 cm at each step
+        timeDelayBetweenCommands = .1; % fast movements for calibration
 
-useAttraction = 0;
-maximumAttractDistance = 500;
-closestAttractApproach = 300;
-
-timeStep = 20; % tuneable parameter that controls speed of robot
-% can be dynamic based on the distance from the goal
-% The command velocity is vector with this magnitude, mm
+    case 'demoAvoidance1'
+        % follow the goal trajectory while avoiding the flock sensors
+        % arm will avoid the birds separately
+        % closest approach distance is controlled by inter-bird distance
+        % end effector can be chased away
+        
+        useVelocityControl = 0; % whether to use velocity-only control
+        useFlock = 1; % master switch to enable the flock of birds
+        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+        diagonalShift = 1; % whether the live flock transmitter is set diagonally
+        
+        useAvoidance = 1; % whether to avoid the flock
+        useAttraction = 0;
+        timeStep = 20; % move 2 cm at each step
+        timeDelayBetweenCommands = .5; % slower update rate
+        
+    case 'demoOrientationControl'
+        % control the end effector orientation using the flock
+        % constellation. The orientation goal is in the direction of bird
+        % 1 to 2 point direction.
+        
+        useVelocityControl = 0; % whether to use velocity-only control
+        useFlock = 1; % master switch to enable the flock of birds
+        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+        diagonalShift = 1; % whether the live flock transmitter is set diagonally
+        useAvoidance = 0; % whether to avoid the flock
+        useAttraction = 0;
+        useOrientationControl = 1;
+        timeStep = 20; % move 2 cm at each step
+        timeDelayBetweenCommands = .5; % slower update rate
+        
+    otherwise %default to 'manual'    manual entry
+        useVelocityControl = 1; % whether to use velocity-only control
+        
+        useFlock = 1; % master switch to enable the flock of birds
+        
+        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+        flockCOMstr = 'COM4'; % select the comm port
+        diagonalShift = 1; % whether the live flock transmitter is set diagonally
+        
+        useAvoidance = 1; % whether to avoid the flock
+        maximumRepelDistance = 500; %mm, max distance to consider avoidance
+        closestAllowedApproach = 300; % mm
+        useCAAbasedOnFlockSeparation = 1; % whether to bind the closestAllowedApproach to the bird1-bird2 separation
+        
+        useAttraction = 0;
+        maximumAttractDistance = 500;
+        closestAttractApproach = 300;
+        
+        timeStep = 20; % tuneable parameter that controls speed of robot
+        % can be dynamic based on the distance from the goal
+        % The command velocity is vector with this magnitude, mm
+        timeDelayBetweenCommands = .5; % added delay between robot commands
+end
+% if varibles were not set, then set to default
+if ~exist('useOrientationControl', 'var'), useOrientationControl=0;end
 
 
 %% Flock of birds setup
@@ -65,7 +127,7 @@ import Presentation.CytonI.*
 hCyton=CytonI;
 
 %Syncs up with the actual robot
-hCyton.connectToHardware('COM1')
+hCyton.connectToHardware(robotCOMstr)
 
 hCyton.hPlant.ApplyLimits=true;
 
@@ -158,13 +220,14 @@ switch trajx
         goalOrient= [0  0 1; 0 1 0; -1 0 0];
     case 6
         % go up and down
-        goalTraj=[ repmat([200 -300],20,1), [linspace(100,350,10) -1*linspace(100,350,10)+350].'];
+        goalTraj=[ repmat([200 -300],20,1), [linspace(100,400,10) -1*linspace(100,400,10)+400].'];
         
         %         useRadialOrientation = 1; % whether to set the orientation of the end effector to a radially outward direction
         goalOrient = [1 -1 0].';
         goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
         
 end
+
 if ~exist('useRadialOrientation', 'var'), useRadialOrientation=0;end
 
 % saved points that are marked and in the usable space
@@ -248,7 +311,7 @@ while  keepRunning
     else
         % compute the unit vector scaled by timeStep
         % can be scaled by posDiff
-        commandVector = commandVector/norm(commandVector)*timeStep;
+        commandVector = commandVector/norm(commandVector)*timeStep; %mm
         
         % get the command/desired velocity vector
         if useVelocityControl
@@ -264,6 +327,12 @@ while  keepRunning
                 % compute the goal orientation as the end effector position
                 % unit vector
                 goalOrient = endeffPos/norm(endeffPos);
+            
+            elseif useOrientationControl && useFlock
+                % compute the goal pointing orientation as the vector from
+                % bird 1 to 2
+                goalOrient = flockPos(2,:) - flockPos(1,:); %requires 2 birds
+                goalOrient = goalOrient/norm(goalOrient); % make unit vector
             end
             
             % compute the axis of rotation as the cross product of the
@@ -282,6 +351,8 @@ while  keepRunning
         end
         
         
+        % modify commandVel from strictly seeking its current goal to
+        % another task
         if useAvoidance && useFlock % change the command 3D velocity to avoid the flock
             % flockPos, position of the two birds
             % endeffPos, effector position
@@ -330,12 +401,7 @@ while  keepRunning
             attractionGoal = 20; % mm
             if repelDist > attractionGoal
                 %generate an attraction velocity from the attraction position
-                
-                % velocity is parabolic with zero at the
-                % maximumAttractDistance and matches timeStep at the
-                % closestAllowedApproach
-                repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
-                
+                               
                 % set the magnitude to be fixed or the error
                 repelMag = min(20,repelDist);
                 repelVelocity = -repelMag*repelVec/repelDist;
@@ -349,7 +415,7 @@ while  keepRunning
                 end
                 updateCommand = 1; % update
             else
-                updateCommand = 0; % don't update
+                updateCommand = 0; % don't update if the attraction goal is reached
                 % no velocity
                 commandVel(1:3) = [0 0 0];
                 % this may cause some jitter in the robot - consider using
@@ -367,7 +433,7 @@ while  keepRunning
             % command the robot position in joint space q
             hCyton.setJointParameters(q);
         end
-        pause(.1); % wait
+        pause(timeDelayBetweenCommands); % wait
         
     end
 end
