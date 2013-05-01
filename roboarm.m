@@ -12,9 +12,9 @@ if ~exist('MiniVIE')
 end
 
 %% options
-useVelocityControl = 0; % whether to use velocity-only control
+useVelocityControl = 1; % whether to use velocity-only control
 
-useFlock = 0; % master switch to enable the flock of birds
+useFlock = 1; % master switch to enable the flock of birds
 
 FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
 flockCOMstr = 'COM4'; % select the comm port
@@ -65,7 +65,7 @@ import Presentation.CytonI.*
 hCyton=CytonI;
 
 %Syncs up with the actual robot
-% hCyton.connectToHardware('COM1')
+hCyton.connectToHardware('COM1')
 
 hCyton.hPlant.ApplyLimits=true;
 
@@ -158,7 +158,7 @@ switch trajx
         goalOrient= [0  0 1; 0 1 0; -1 0 0];
     case 6
         % go up and down
-        goalTraj=[ repmat([0 -400],20,1), [linspace(100,350,10) -1*linspace(100,350,10)+350].'];
+        goalTraj=[ repmat([200 -300],20,1), [linspace(100,350,10) -1*linspace(100,350,10)+350].'];
         
         %         useRadialOrientation = 1; % whether to set the orientation of the end effector to a radially outward direction
         goalOrient = [1 -1 0].';
@@ -181,6 +181,7 @@ hCyton.hDisplay.setTarget(goalPos);
 
 %% control loop
 keepRunning = 1;
+updateCommand = 1; % init
 while  keepRunning
     %% update the flock
     if useFlock
@@ -307,6 +308,7 @@ while  keepRunning
                         distBird2bird = flockPos(1,:) - flockPos(2,:); %requires 2 birds
                         distBird2bird = norm(distBird2bird); % magnitude
                         closestAllowedApproach = distBird2bird; % set the closest allowed approach
+                        disp(['closest allowed approach ' num2str(closestAllowedApproach)])
                     end
                     
                     repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
@@ -324,8 +326,8 @@ while  keepRunning
              
             repelVec = endeffPos.' - repelPos; % vector of repulsion
             repelDist = norm(repelVec); % 3D distance, mm
-            
-            attractionGoal = 10; % mm
+            disp(['Distance to bird ' num2str(repelDist)])
+            attractionGoal = 20; % mm
             if repelDist > attractionGoal
                 %generate an attraction velocity from the attraction position
                 
@@ -333,6 +335,9 @@ while  keepRunning
                 % maximumAttractDistance and matches timeStep at the
                 % closestAllowedApproach
                 repelMag = (maximumRepelDistance-repelDist)^2*timeStep/(maximumRepelDistance-closestAllowedApproach)^2;
+                
+                % set the magnitude to be fixed or the error
+                repelMag = min(20,repelDist);
                 repelVelocity = -repelMag*repelVec/repelDist;
                 
                 if 0
@@ -342,7 +347,9 @@ while  keepRunning
                     % use attraction only without other goal
                     commandVel(1:3) = repelVelocity;
                 end
+                updateCommand = 1; % update
             else
+                updateCommand = 0; % don't update
                 % no velocity
                 commandVel(1:3) = [0 0 0];
                 % this may cause some jitter in the robot - consider using
@@ -351,15 +358,16 @@ while  keepRunning
  
         end
         
-        [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
-                
-        % compute the command position
-        q = q + qdot; % qdot is already scaled by time
-         
-        % command the robot position in joint space q
-        hCyton.setJointParameters(q);
-        
-        pause(1); % wait
+        if updateCommand
+            [qdot, J] = hCyton.hControls.computeVelocity(commandVel); % get the joint velocities
+            
+            % compute the command position
+            q = q + qdot; % qdot is already scaled by time
+            
+            % command the robot position in joint space q
+            hCyton.setJointParameters(q);
+        end
+        pause(.1); % wait
         
     end
 end
