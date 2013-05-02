@@ -14,6 +14,8 @@ end
 %% options
 robotCOMstr = 'COM1';
 flockCOMstr = 'COM4'; % select the comm ports
+%robotCOMstr = 'COM1';
+%flockCOMstr = 'COM4'; % select the comm ports
 
 
 modeString = 'demoOrientationControl'; 
@@ -77,13 +79,13 @@ trajx = 6;
     otherwise %default to 'manual'    manual entry
         useVelocityControl = 1; % whether to use velocity-only control
         
-        useFlock = 1; % master switch to enable the flock of birds
+        useFlock = 0; % master switch to enable the flock of birds
         
-        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+        FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
         flockCOMstr = 'COM4'; % select the comm port
         diagonalShift = 1; % whether the live flock transmitter is set diagonally
         
-        useAvoidance = 1; % whether to avoid the flock
+        useAvoidance = 0; % whether to avoid the flock
         maximumRepelDistance = 500; %mm, max distance to consider avoidance
         closestAllowedApproach = 300; % mm
         useCAAbasedOnFlockSeparation = 1; % whether to bind the closestAllowedApproach to the bird1-bird2 separation
@@ -134,7 +136,7 @@ import Presentation.CytonI.*
 hCyton=CytonI;
 
 %Syncs up with the actual robot
-hCyton.connectToHardware(robotCOMstr)
+%hCyton.connectToHardware(robotCOMstr)
 
 hCyton.hPlant.ApplyLimits=true;
 
@@ -158,7 +160,7 @@ end
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-
+trajx = 5;
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -220,15 +222,29 @@ switch trajx
         %if trying to get to a point outside of reachable space
         goalOrient= [0  0 -1; 0 -1 0; -1 0 0];
     case 5 % Arc of points
-        goalTraj=[
-            368 -14  46
-            320 -14  218
-            250 -270 46
-            250 -270 218
-            352 -108 46
-            ];
+        arcRad = 350;
+        xvec = linspace(350,0,51);
+        yvec = -sqrt(arcRad^2-xvec.^2);
+        zvec =100*sin(xvec*3*pi/180)+120;    
+%             goalTraj=[
+%             368 -14  46
+%             320 -14  218
+%             250 -270 46
+%             250 -270 218
+%             352 -108 46
+%             ];
+        goalTraj=[xvec' yvec' zvec'];
         % orientation of the x axis (out of the end effector)
         goalOrient= [0  0 1; 0 1 0; -1 0 0];
+        
+        %transition the current position of robot end-effector to the
+        %starting point of the trajectory
+%         startPos = hCyton.hControls.getT_0_N;
+%         startXYZ = startPos(1:3,4);
+%         initMoveStep = 10;
+%         initDir = (goalTraj(1,*)-startXYZ)/norm(goalTraj(1,*)-startXYZ);
+%         initMag = norm(goalTraj(1,*)-startXYZ)/initMoveStep;
+        
     case 6
         % go up and down
         goalTraj=[ repmat([200 -300],20,1), [linspace(100,400,10) -1*linspace(100,400,10)+400].'];
@@ -303,7 +319,7 @@ while  keepRunning
        
     % if the goal is reached, go to the next position
     goalMargin = 10; % mm
-       
+    
     if posDiff < goalMargin && ~holdPosition % within some margin
         i = i+1; % increment
         if i > size(goalTraj,1), i=1; end % loop back to the beginning
@@ -448,7 +464,7 @@ while  keepRunning
             hCyton.setJointParameters(q);
             while ~hCyton.hPlant.allMovesComplete
                 pause(timeDelayBetweenCommands); % wait a cyle
-            end
+        end
         end
         pause(timeDelayBetweenCommands); % wait
         
