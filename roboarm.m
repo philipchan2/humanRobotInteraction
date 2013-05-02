@@ -16,7 +16,7 @@ robotCOMstr = 'COM1';
 flockCOMstr = 'COM4'; % select the comm ports
 
 
-modeString = 'demoCalibration'; 
+modeString = 'demoOrientationControl'; 
 % demoCalibration 
 % demoAvoidance1
 % demoOrientationControl
@@ -35,9 +35,9 @@ switch modeString
         
         useAvoidance = 0; % whether to avoid the flock
         useAttraction = 1;
-        timeStep = 10; % move 1 cm at each step
+        timeStep = 20; % move 1 cm at each step
         timeDelayBetweenCommands = .1; % fast movements for calibration
-
+trajx = 6;
     case 'demoAvoidance1'
         % follow the goal trajectory while avoiding the flock sensors
         % arm will avoid the birds separately
@@ -50,10 +50,13 @@ switch modeString
         diagonalShift = 1; % whether the live flock transmitter is set diagonally
         
         useAvoidance = 1; % whether to avoid the flock
-        useAttraction = 0;
-        timeStep = 20; % move 2 cm at each step
-        timeDelayBetweenCommands = .5; % slower update rate
+        maximumRepelDistance = 500; %mm, max distance to consider avoidance
+        useCAAbasedOnFlockSeparation = 1; % whether to bind the closestAllowedApproach to the bird1-bird2 separation
         
+        useAttraction = 0;
+        timeStep = 20; % move cm at each step
+        timeDelayBetweenCommands = .2; % update rate
+        trajx = 6;
     case 'demoOrientationControl'
         % control the end effector orientation using the flock
         % constellation. The orientation goal is in the direction of bird
@@ -68,6 +71,8 @@ switch modeString
         useOrientationControl = 1;
         timeStep = 20; % move 2 cm at each step
         timeDelayBetweenCommands = .5; % slower update rate
+        holdPosition = 1;
+        trajx = 7;
         
     otherwise %default to 'manual'    manual entry
         useVelocityControl = 1; % whether to use velocity-only control
@@ -91,9 +96,11 @@ switch modeString
         % can be dynamic based on the distance from the goal
         % The command velocity is vector with this magnitude, mm
         timeDelayBetweenCommands = .5; % added delay between robot commands
+        trajx = 6;
 end
 % if varibles were not set, then set to default
 if ~exist('useOrientationControl', 'var'), useOrientationControl=0;end
+if ~exist('holdPosition', 'var'), holdPosition=0;end
 
 
 %% Flock of birds setup
@@ -131,6 +138,7 @@ hCyton.connectToHardware(robotCOMstr)
 
 hCyton.hPlant.ApplyLimits=true;
 
+
 % init command to all zeros
 q=[0 0 0 0 0 0 0 0].';
 
@@ -139,7 +147,10 @@ q=[0 0 0 0 0 0 0 0].';
 
 % q=[-60 -75 0 0 0 0 0 0.6].'*pi/180;% smart starting point
 
-hCyton.setJointParameters(q); pause(3)
+hCyton.setJointParameters(q); 
+while ~hCyton.hPlant.allMovesComplete
+    pause(timeDelayBetweenCommands); % wait a cyle
+end
 
 %% compute the goal position, units of mm
 % trajx = chooses goal trajectory
@@ -147,7 +158,7 @@ hCyton.setJointParameters(q); pause(3)
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 6;
+
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -223,9 +234,12 @@ switch trajx
         goalTraj=[ repmat([200 -300],20,1), [linspace(100,400,10) -1*linspace(100,400,10)+400].'];
         
         %         useRadialOrientation = 1; % whether to set the orientation of the end effector to a radially outward direction
-        goalOrient = [1 -1 0].';
+        goalOrient = [0 -1 -.5].';
         goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
-        
+    case 7
+        goalTraj=[ 200 -200 300];
+        goalOrient = [0 0 1].';
+        goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
 end
 
 if ~exist('useRadialOrientation', 'var'), useRadialOrientation=0;end
@@ -289,8 +303,8 @@ while  keepRunning
        
     % if the goal is reached, go to the next position
     goalMargin = 10; % mm
-    
-    if posDiff < goalMargin % within some margin
+       
+    if posDiff < goalMargin && ~holdPosition % within some margin
         i = i+1; % increment
         if i > size(goalTraj,1), i=1; end % loop back to the beginning
         
@@ -332,7 +346,7 @@ while  keepRunning
                 % compute the goal pointing orientation as the vector from
                 % bird 1 to 2
                 goalOrient = flockPos(2,:) - flockPos(1,:); %requires 2 birds
-                goalOrient = goalOrient/norm(goalOrient); % make unit vector
+                goalOrient = goalOrient.'/norm(goalOrient); % make unit vector
             end
             
             % compute the axis of rotation as the cross product of the
@@ -432,6 +446,9 @@ while  keepRunning
             
             % command the robot position in joint space q
             hCyton.setJointParameters(q);
+            while ~hCyton.hPlant.allMovesComplete
+                pause(timeDelayBetweenCommands); % wait a cyle
+            end
         end
         pause(timeDelayBetweenCommands); % wait
         
