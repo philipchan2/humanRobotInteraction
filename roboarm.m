@@ -7,20 +7,22 @@ if ~exist('MiniVIE')
     %     addpath(genpath('c:\usr\myopen\MiniVIE')); %in lab
     
     %     on Mac laptop
-    addpath(genpath(pwd));
-    addpath(genpath('/Users/chanp1/myopen'));
+    %     addpath(genpath(pwd));
+    %     addpath(genpath('/Users/chanp1/myopen'));
+    
+    % in the lab thursday
+    restoredefaultpath;
+    addpath(genpath('C:\Documents and Settings\vradmin\Desktop\chan\thu\myopen'));
 end
 
 %% options
 robotCOMstr = 'COM1';
 flockCOMstr = 'COM4'; % select the comm ports
-%robotCOMstr = 'COM1';
-%flockCOMstr = 'COM4'; % select the comm ports
 
-
-modeString = 'demoOrientationControl'; 
-% demoCalibration 
+modeString = 'demoAvoidance1';
+% demoCalibration
 % demoAvoidance1
+% demoAttraction
 % demoOrientationControl
 % manual
 
@@ -39,14 +41,14 @@ switch modeString
         useAttraction = 1;
         timeStep = 20; % move 1 cm at each step
         timeDelayBetweenCommands = .1; % fast movements for calibration
-trajx = 6;
+        trajx = 6;
     case 'demoAvoidance1'
         % follow the goal trajectory while avoiding the flock sensors
         % arm will avoid the birds separately
         % closest approach distance is controlled by inter-bird distance
         % end effector can be chased away
         
-        useVelocityControl = 0; % whether to use velocity-only control
+        useVelocityControl = 1; % whether to use velocity-only control
         useFlock = 1; % master switch to enable the flock of birds
         FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
         diagonalShift = 1; % whether the live flock transmitter is set diagonally
@@ -58,7 +60,25 @@ trajx = 6;
         useAttraction = 0;
         timeStep = 20; % move cm at each step
         timeDelayBetweenCommands = .2; % update rate
-        trajx = 6;
+        trajx = 5;
+        
+    case 'demoAttraction'
+        % attract to the bird sensor only if commanded to do so. Otherwise,
+        % the robot will follow its other goals
+        useVelocityControl = 1; % whether to use velocity-only control
+        useFlock = 1; % master switch to enable the flock of birds
+        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
+        diagonalShift = 1; % whether the live flock transmitter is set diagonally
+                
+        useAttraction = 1;
+        useAvoidance = 0;
+        timeStep = 20; % move cm at each step
+        timeDelayBetweenCommands = .2; % update rate
+        trajx = 7;
+        
+        useAttractionCommand = 1; % command attraction on and off using bird orientation
+        holdPosition = 1; % hold a single point and continue to respond
+        
     case 'demoOrientationControl'
         % control the end effector orientation using the flock
         % constellation. The orientation goal is in the direction of bird
@@ -79,13 +99,13 @@ trajx = 6;
     otherwise %default to 'manual'    manual entry
         useVelocityControl = 1; % whether to use velocity-only control
         
-        useFlock = 0; % master switch to enable the flock of birds
+        useFlock = 1; % master switch to enable the flock of birds
         
-        FlockLive = 0;% whether to use the live Flock of Birds data 1, or recorded 0
+        FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
         flockCOMstr = 'COM4'; % select the comm port
         diagonalShift = 1; % whether the live flock transmitter is set diagonally
         
-        useAvoidance = 0; % whether to avoid the flock
+        useAvoidance = 1; % whether to avoid the flock
         maximumRepelDistance = 500; %mm, max distance to consider avoidance
         closestAllowedApproach = 300; % mm
         useCAAbasedOnFlockSeparation = 1; % whether to bind the closestAllowedApproach to the bird1-bird2 separation
@@ -100,15 +120,17 @@ trajx = 6;
         timeDelayBetweenCommands = .5; % added delay between robot commands
         trajx = 6;
 end
+
 % if varibles were not set, then set to default
 if ~exist('useOrientationControl', 'var'), useOrientationControl=0;end
 if ~exist('holdPosition', 'var'), holdPosition=0;end
+if ~exist('useAttractionCommand', 'var'), useAttractionCommand=0;end  
 
 
 %% Flock of birds setup
 
 if useFlock
-
+    
     if FlockLive
         % setup the flock data
         % Requires MiniVIE Utilities
@@ -136,7 +158,7 @@ import Presentation.CytonI.*
 hCyton=CytonI;
 
 %Syncs up with the actual robot
-%hCyton.connectToHardware(robotCOMstr)
+hCyton.connectToHardware(robotCOMstr)
 
 hCyton.hPlant.ApplyLimits=true;
 
@@ -149,7 +171,7 @@ q=[0 0 0 0 0 0 0 0].';
 
 % q=[-60 -75 0 0 0 0 0 0.6].'*pi/180;% smart starting point
 
-hCyton.setJointParameters(q); 
+hCyton.setJointParameters(q);
 while ~hCyton.hPlant.allMovesComplete
     pause(timeDelayBetweenCommands); % wait a cyle
 end
@@ -160,7 +182,7 @@ end
 % trajx = 1  SWEEP is a sinusoidal wave in x-y plane , z=200;
 % trajx = 2  is a sinusoidal wave in x-z plane, circle in x-y plane
 % trajx = 3  is a box motion; quirky, will work on singularities.
-trajx = 5;
+
 switch trajx
     case 0
         xtraj = zeros(1,8)-300;
@@ -225,26 +247,27 @@ switch trajx
         arcRad = 350;
         xvec = linspace(350,0,51);
         yvec = -sqrt(arcRad^2-xvec.^2);
-        zvec =100*sin(xvec*3*pi/180)+120;    
-%             goalTraj=[
+        zvec =100*sin(xvec*3*pi/180)+120;
+% goalTraj=[
+% 368 -14 46
+% 320 -14 218
+% 250 -270 46
+% 250 -270 218
+% 352 -108 46
+% ];
+        goalTraj=[xvec' yvec' zvec'];
+        % orientation of the x axis (out of the end effector)
+        goalOrient= [0 -1 -0.5].';
+        goalOrient=goalOrient/norm(goalOrient);
+%         goalTraj=[
 %             368 -14  46
 %             320 -14  218
 %             250 -270 46
 %             250 -270 218
 %             352 -108 46
 %             ];
-        goalTraj=[xvec' yvec' zvec'];
-        % orientation of the x axis (out of the end effector)
-        goalOrient= [0  0 1; 0 1 0; -1 0 0];
-        
-        %transition the current position of robot end-effector to the
-        %starting point of the trajectory
-%         startPos = hCyton.hControls.getT_0_N;
-%         startXYZ = startPos(1:3,4);
-%         initMoveStep = 10;
-%         initDir = (goalTraj(1,*)-startXYZ)/norm(goalTraj(1,*)-startXYZ);
-%         initMag = norm(goalTraj(1,*)-startXYZ)/initMoveStep;
-        
+%         % orientation of the x axis (out of the end effector)
+%         goalOrient= [0  0 1; 0 1 0; -1 0 0];
     case 6
         % go up and down
         goalTraj=[ repmat([200 -300],20,1), [linspace(100,400,10) -1*linspace(100,400,10)+400].'];
@@ -253,7 +276,7 @@ switch trajx
         goalOrient = [0 -1 -.5].';
         goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
     case 7
-        goalTraj=[ 200 -200 300];
+        goalTraj=[ 0 -350 350];
         goalOrient = [0 0 1].';
         goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
 end
@@ -275,6 +298,7 @@ hCyton.hDisplay.setTarget(goalPos);
 %% control loop
 keepRunning = 1;
 updateCommand = 1; % init
+flockFrame = eye(3);% init
 while  keepRunning
     %% update the flock
     if useFlock
@@ -296,6 +320,18 @@ while  keepRunning
                 % no data returned
                 flockPos = flockPos_prev; % keep the flock in the same place
             end
+            
+            if useAttractionCommand % use the bird to make a binary command
+                flockFrame_prev = flockFrame; % save the old
+                flockFrame = objFlock.getframes; % get the new
+                if ~isempty(flockFrame) % if returned data
+                    flockFrame = flockFrame(:,:,1); % isolate bird 1
+                    flockFrame = transformFlockOrientation(flockFrame); % return the transform in the robot frame
+                else
+                    flockFrame = flockFrame_prev;
+                end
+            end
+            
         else % use recorded data
             ibird = ibird+1; %increment
             if ibird > size(outdata.bird1pos,1), ibird=1; end % loop back to the beginning
@@ -316,7 +352,7 @@ while  keepRunning
     % compute the difference between the goal and current position
     commandVector = goalPos - endeffPos;
     posDiff = norm(commandVector);
-       
+    
     % if the goal is reached, go to the next position
     goalMargin = 10; % mm
     
@@ -352,12 +388,12 @@ while  keepRunning
             
             % compute the rotation between goal and current orientation wrt base
             thetaPerTimeStep_rad = 5*pi/180; % angle to rotate the end effector each step
-   
+            
             if useRadialOrientation
                 % compute the goal orientation as the end effector position
                 % unit vector
                 goalOrient = endeffPos/norm(endeffPos);
-            
+                
             elseif useOrientationControl && useFlock
                 % compute the goal pointing orientation as the vector from
                 % bird 1 to 2
@@ -374,7 +410,7 @@ while  keepRunning
             
             % compute the angular velocity as the desired magnitude and the
             % rotation axis unit vector
-            wmove = magRot*rotAxis/norm(rotAxis);          
+            wmove = magRot*rotAxis/norm(rotAxis);
             
             % set the velocity and angular velocity
             commandVel= [commandVector.' wmove'];
@@ -424,21 +460,39 @@ while  keepRunning
         elseif useAttraction && useFlock %--- Attraction/Chase sequence
 
             repelPos = flockPos(1,:); % select a bird
-             
+            
             repelVec = endeffPos.' - repelPos; % vector of repulsion
             repelDist = norm(repelVec); % 3D distance, mm
             disp(['Distance to bird ' num2str(repelDist)])
             attractionGoal = 20; % mm
             if repelDist > attractionGoal
                 %generate an attraction velocity from the attraction position
-                               
+                
                 % set the magnitude to be fixed or the error
                 repelMag = min(20,repelDist);
                 repelVelocity = -repelMag*repelVec/repelDist;
                 
-                if 0
-                    % vector sum of repel and command velocity
-                    commandVel(1:3) = commandVel(1:3) + repelVelocity;
+                if useAttractionCommand
+                    % decide whether to attract or not based on the bird
+                    % orientation
+                    
+                    % if the bird z is facing the endeffector within x
+                    % degress, then attract otherwise, don't
+
+                    if dot(flockFrame(1:3,3),repelVec/repelDist) >= cosd(60)
+                        attract2bird = 1;
+                        disp('attracting')
+                    else
+                        attract2bird = 0;
+                    end
+                    
+                    if attract2bird
+                        % use attraction only without other goal
+                        commandVel(1:3) = repelVelocity;
+                    else
+                        % the arms will attract to its original goal
+                    end
+                    
                 else
                     % use attraction only without other goal
                     commandVel(1:3) = repelVelocity;
@@ -451,7 +505,7 @@ while  keepRunning
                 % this may cause some jitter in the robot - consider using
                 % a flag to toggle motion on and off
             end
- 
+            
         end
         
         if updateCommand
@@ -464,7 +518,7 @@ while  keepRunning
             hCyton.setJointParameters(q);
             while ~hCyton.hPlant.allMovesComplete
                 pause(timeDelayBetweenCommands); % wait a cyle
-        end
+            end
         end
         pause(timeDelayBetweenCommands); % wait
         
