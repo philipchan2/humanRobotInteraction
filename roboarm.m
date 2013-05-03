@@ -19,12 +19,13 @@ end
 robotCOMstr = 'COM1';
 flockCOMstr = 'COM4'; % select the comm ports
 
-modeString = 'demoAvoidance1';
+modeString = 'demoAttraction';
 % demoCalibration
 % demoAvoidance1
 % demoAttraction
-% demoOrientationControl
 % manual
+
+% demoOrientationControl
 
 switch modeString
     case 'demoCalibration'
@@ -60,11 +61,16 @@ switch modeString
         useAttraction = 0;
         timeStep = 20; % move cm at each step
         timeDelayBetweenCommands = .2; % update rate
-        trajx = 5;
+
+        %         trajx = 5; % arc
+        trajx = 6; % up and down
+        %         holdPosition = 1;trajx = 7; % hold a position
         
     case 'demoAttraction'
         % attract to the bird sensor only if commanded to do so. Otherwise,
         % the robot will follow its other goals
+        % The gripper closes when away from the attractor and opens when
+        % close. This allows the robot to take, go and bring back-release
         useVelocityControl = 1; % whether to use velocity-only control
         useFlock = 1; % master switch to enable the flock of birds
         FlockLive = 1;% whether to use the live Flock of Birds data 1, or recorded 0
@@ -276,7 +282,7 @@ switch trajx
         goalOrient = [0 -1 -.5].';
         goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
     case 7
-        goalTraj=[ 0 -350 350];
+        goalTraj=[ 0 -300 350];
         goalOrient = [0 0 1].';
         goalOrient = goalOrient/norm(goalOrient); % must be a unit vector
 end
