@@ -163,8 +163,8 @@ hCyton.connectToHardware(robotCOMstr)
 hCyton.hPlant.ApplyLimits=true;
 
 
-% init command to all zeros
-q=[0 0 0 0 0 0 0 0].';
+% init command to all straight up with gripper closed
+q=[0 0 0 0 0 0 0 .8].';
 
 % get joint parameters
 % q=hCyton.JointParameters;
@@ -498,7 +498,12 @@ while  keepRunning
                     commandVel(1:3) = repelVelocity;
                 end
                 updateCommand = 1; % update
-            else
+                
+                q(8) = 0.8;hCyton.setJointParameters(q); % close the gripper
+            
+            else % the attraction goal has been reached
+                q(8) = 0;hCyton.setJointParameters(q); % open the gripper
+                
                 updateCommand = 0; % don't update if the attraction goal is reached
                 % no velocity
                 commandVel(1:3) = [0 0 0];
